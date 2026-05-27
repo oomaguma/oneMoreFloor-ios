@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The app integrates Google AdMob which uses data for advertising tracking.
+	     ATT consent is collected via Google UMP before ads are initialised. -->
+	<key>NSPrivacyTracking</key>
+	<true/>
+
+	<!-- Domains contacted by the app for advertising / tracking purposes. -->
+	<key>NSPrivacyTrackingDomains</key>
+	<array>
+		<string>googlesyndication.com</string>
+		<string>googleadservices.com</string>
+		<string>doubleclick.net</string>
+		<string>google-analytics.com</string>
+		<string>googletagmanager.com</string>
+	</array>
+
+	<!-- Data collected by the app (via AdMob) from users. -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<!-- Device advertising identifier (IDFA) — used for ad targeting. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
+			</array>
+		</dict>
+		<!-- In-app interaction data used to measure ad effectiveness. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeProductInteraction</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Required Reason APIs used directly by the app. -->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<!-- UserDefaults: stores IAP purchase status and game save data.
+			     Data is local to the device and not accessible outside the app. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

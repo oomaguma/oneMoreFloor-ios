@@ -4,6 +4,8 @@ import UIKit
 @Observable
 @MainActor
 final class AdManager {
+    static let shared = AdManager()
+
     private(set) var isOfflineAdReady = false
     private(set) var isReviveAdReady  = false
 

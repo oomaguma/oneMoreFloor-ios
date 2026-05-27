@@ -2,6 +2,7 @@ import UIKit
 import SwiftUI
 import GoogleMobileAds
 import UserMessagingPlatform
+import AppTrackingTransparency
 
 class GameViewController: UIViewController {
 
@@ -22,12 +23,26 @@ class GameViewController: UIViewController {
     private func requestConsentThenStartAds() {
         ConsentInformation.shared.requestConsentInfoUpdate(with: nil) { [weak self] error in
             guard let self, error == nil else {
-                MobileAds.shared.start()
+                // UMP failed — still need to handle ATT before starting ads.
+                self?.requestATTIfNeeded { MobileAds.shared.start() }
                 return
             }
-            ConsentForm.loadAndPresentIfRequired(from: self) { _ in
-                MobileAds.shared.start()
+            // UMP 3.x requests ATT automatically for non-EEA users when
+            // NSUserTrackingUsageDescription is present, but we add an explicit
+            // fallback so ads always start even if UMP skips the ATT prompt.
+            ConsentForm.loadAndPresentIfRequired(from: self) { [weak self] _ in
+                self?.requestATTIfNeeded { MobileAds.shared.start() }
             }
+        }
+    }
+
+    private func requestATTIfNeeded(then completion: @escaping () -> Void) {
+        guard ATTrackingManager.trackingAuthorizationStatus == .notDetermined else {
+            completion()
+            return
+        }
+        ATTrackingManager.requestTrackingAuthorization { _ in
+            DispatchQueue.main.async { completion() }
         }
     }
 

@@ -40,6 +40,7 @@ struct OfflineSummary {
     let floorsCleared: Int
     let deepestFloor: Int
     let duration: TimeInterval
+    var stoppedByDeath: Bool = false
 
     var hasContent: Bool { goldEarned > 0 || deaths > 0 }
 
@@ -171,6 +172,8 @@ class DungeonGame {
     var pendingBossVictory: BossVictory? = nil
     var pendingFloorEvent: FloorEvent? = nil
     var activeEffects: [ActiveEffect] = []
+    var usableItems: [UsableItem] = []
+    static let usableItemLimit = 3
     private(set) var appliedSetBonus: ItemRarity? = nil
 
     // MARK: - Zone unlock
@@ -323,6 +326,15 @@ class DungeonGame {
         guard !isGameOver else { return }
 
         if heroHp <= 0 {
+            if let idx = usableItems.firstIndex(where: { $0.kind == .revive }) {
+                usableItems.remove(at: idx)
+                heroHp = max(1, heroMaxHp / 3)
+                inCombat = false
+                ticksUntilFight = 3
+                log("🔮 Phoenix Charm activates! You are revived with \(heroHp) HP!")
+                onHeroHeal?(heroHp)
+                return
+            }
             isGameOver = true
             inCombat   = false
             log("Hero has fallen. Tap Restart to try again.")
@@ -343,6 +355,7 @@ class DungeonGame {
 
     func restart() {
         stripActiveEffects()
+        usableItems         = []
         pendingFloorEvent   = nil
         heroHp              = heroMaxHp
         currentFloor        = 1
@@ -700,8 +713,13 @@ class DungeonGame {
     private func applyPrimaryEffect(_ t: FloorEventTemplate) {
         switch t {
         case .ancientShrine:
-            heroHp = heroMaxHp
-            log("⛩️ The shrine restores your HP to full.")
+            if usableItems.count < DungeonGame.usableItemLimit {
+                usableItems.append(UsableItem(id: UUID(), name: "Holy Vial", icon: "⛩️", kind: .fullHeal))
+                log("⛩️ The shrine imbues a vial. Holy Vial added to your bag.")
+            } else {
+                heroHp = heroMaxHp
+                log("⛩️ Your bag is full — the shrine restores your HP to full instead.")
+            }
         case .goldCache:
             gold += 50
             log("💰 You find 50 gold hidden in the rubble!")
@@ -717,6 +735,13 @@ class DungeonGame {
             applyAndRecord(ActiveEffect(id: UUID(), name: "Life Spring", icon: "💉",
                                         isBlessing: true, atkMod: 0, defMod: 0, maxHpMod: 0, regenMod: 1))
             log("💉 Life Spring: +1 Regen for this run!")
+        case .reviveBlessing:
+            if usableItems.count < DungeonGame.usableItemLimit {
+                usableItems.append(UsableItem(id: UUID(), name: "Phoenix Charm", icon: "🔮", kind: .revive))
+                log("🔮 Phoenix Charm added. It will revive you once if you fall.")
+            } else {
+                log("🔮 Your bag is full — the phoenix flame fades.")
+            }
         case .bloodPactAltar:
             applyAndRecord(ActiveEffect(id: UUID(), name: "Blood Pact", icon: "🩸",
                                         isBlessing: true, atkMod: 5, defMod: 0, maxHpMod: 0, regenMod: 0))
@@ -730,11 +755,34 @@ class DungeonGame {
                                         isBlessing: true, atkMod: 0, defMod: 0, maxHpMod: 40, regenMod: 0))
             log("💎 Life Vessel: +40 Max HP for this run!")
         case .cursedSigil:
-            log("💀 You resist the cursed sigil. -60 gold.")
+            if Bool.random() {
+                applyAndRecord(ActiveEffect(id: UUID(), name: "Rune Surge", icon: "💀",
+                                            isBlessing: true, atkMod: 3, defMod: 0, maxHpMod: 0, regenMod: 0))
+                log("💀 The runes surge with power! +3 ATK for this run!")
+            } else {
+                applyAndRecord(ActiveEffect(id: UUID(), name: "Cursed Sigil", icon: "💀",
+                                            isBlessing: false, atkMod: -3, defMod: 0, maxHpMod: 0, regenMod: 0))
+                log("💀 The sigil brands you. -3 ATK for this run!")
+            }
         case .witherTouch:
-            log("👻 You ward off the withering touch. -40 gold.")
+            if Bool.random() {
+                applyAndRecord(ActiveEffect(id: UUID(), name: "Vitality Surge", icon: "👻",
+                                            isBlessing: true, atkMod: 0, defMod: 0, maxHpMod: 15, regenMod: 0))
+                log("👻 The spectral hand grants strength! +15 Max HP!")
+            } else {
+                applyAndRecord(ActiveEffect(id: UUID(), name: "Withered", icon: "👻",
+                                            isBlessing: false, atkMod: 0, defMod: 0, maxHpMod: -15, regenMod: 0))
+                log("👻 Wither Touch drains your vitality. -15 Max HP!")
+            }
         case .voidFog:
-            log("🌫️ You flee the void fog. -30 gold.")
+            let quarter = max(1, heroHp / 4)
+            if Bool.random() {
+                heroHp = min(heroMaxHp, heroHp + quarter)
+                log("🌫️ The fog surges with life! +\(quarter) HP!")
+            } else {
+                heroHp = max(1, heroHp - quarter)
+                log("🌫️ The void fog saps \(quarter) HP from you!")
+            }
         case .strangeAltar:
             applyMysteryOutcome()
         }
@@ -742,24 +790,14 @@ class DungeonGame {
 
     private func applySecondaryEffect(_ t: FloorEventTemplate) {
         switch t {
-        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing:
+        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing, .reviveBlessing:
             log("You pass by without stopping.")
         case .bloodPactAltar, .ironForge, .lifeVessel:
             log("You leave the altar untouched.")
         case .strangeAltar:
             log("You leave the strange altar behind.")
-        case .cursedSigil:
-            applyAndRecord(ActiveEffect(id: UUID(), name: "Cursed Sigil", icon: "💀",
-                                        isBlessing: false, atkMod: -3, defMod: 0, maxHpMod: 0, regenMod: 0))
-            log("💀 The sigil brands you. -3 ATK for this run!")
-        case .witherTouch:
-            applyAndRecord(ActiveEffect(id: UUID(), name: "Withered", icon: "👻",
-                                        isBlessing: false, atkMod: 0, defMod: 0, maxHpMod: -15, regenMod: 0))
-            log("👻 Wither Touch drains your vitality. -15 Max HP!")
-        case .voidFog:
-            let damage = max(1, heroHp / 4)
-            heroHp = max(1, heroHp - damage)
-            log("🌫️ The void fog saps \(damage) HP from you!")
+        case .cursedSigil, .witherTouch, .voidFog:
+            log("You flee. Nothing happens.")
         }
     }
 
@@ -817,6 +855,16 @@ class DungeonGame {
 
     func dismissDrop() { pendingDrop = nil }
     func dismissBossVictory() { pendingBossVictory = nil }
+
+    func useItem(_ item: UsableItem) {
+        guard !isGameOver, item.kind == .fullHeal, let idx = usableItems.firstIndex(of: item) else { return }
+        guard heroHp < heroMaxHp else { return }
+        usableItems.remove(at: idx)
+        let healed = heroMaxHp - heroHp
+        heroHp = heroMaxHp
+        onHeroHeal?(healed)
+        log("⛩️ You drink the Holy Vial. HP fully restored (+\(healed)).")
+    }
 
     private func receiveDrop(_ item: Equipment) {
         let autoSellLevel = prestigeUpgrades.first(where: { $0.id == "autosell" })?.level ?? 0
@@ -1048,6 +1096,8 @@ class DungeonGame {
         var pendingFloorEvent: FloorEvent?
         // v5 additions (optional for backwards compatibility)
         var dailyCompletionBonusClaimed: Bool?
+        // v6 additions (optional for backwards compatibility)
+        var usableItems: [UsableItem]?
     }
 
     private static let saveKey = "dungeonSave_v2"
@@ -1087,7 +1137,8 @@ class DungeonGame {
             dailyQuestClaimed:  Dictionary(uniqueKeysWithValues: dailyQuests.map { ($0.id, $0.claimed) }),
             activeEffects: activeEffects,
             pendingFloorEvent: pendingFloorEvent,
-            dailyCompletionBonusClaimed: dailyCompletionBonusClaimed
+            dailyCompletionBonusClaimed: dailyCompletionBonusClaimed,
+            usableItems: usableItems
         )
         if let encoded = try? JSONEncoder().encode(data) {
             UserDefaults.standard.set(encoded, forKey: Self.saveKey)
@@ -1130,6 +1181,7 @@ class DungeonGame {
         }
         equippedItems = data.equippedItems ?? [:]
         inventory     = data.inventory     ?? []
+        usableItems   = data.usableItems   ?? []
 
         appliedSetBonus = data.appliedSetBonus
 
@@ -1177,12 +1229,22 @@ class DungeonGame {
 
         for _ in 0..<tickCount {
             if heroHp <= 0 {
-                deaths += 1
-                if autoRestartEnabled {
-                    heroHp = heroMaxHp; currentFloor = 1; inCombat = false; ticksUntilFight = 3
+                if let idx = usableItems.firstIndex(where: { $0.kind == .revive }) {
+                    usableItems.remove(at: idx)
+                    heroHp = max(1, heroMaxHp / 3)
+                    inCombat = false
                 } else {
-                    isGameOver = true; inCombat = false
-                    break
+                    deaths += 1
+                    if autoRestartEnabled {
+                        heroHp = heroMaxHp; currentFloor = 1; inCombat = false; ticksUntilFight = 3
+                    } else {
+                        isGameOver = true; inCombat = false
+                        var summary = OfflineSummary(goldEarned: goldEarned, deaths: deaths, floorsCleared: floorsCleared,
+                                                     deepestFloor: max(startDeepest, deepestFloor), duration: elapsed)
+                        summary.stoppedByDeath = true
+                        displayMonsterHp = 0; displayMonsterMaxHp = 0; displayMonsterName = ""; currentFightFloor = 0
+                        return summary
+                    }
                 }
             } else if inCombat {
                 monsterHp -= max(1, heroAtk)

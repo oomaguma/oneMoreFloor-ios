@@ -122,13 +122,13 @@ class CombatScene: SKScene {
         loadHeroFrames()
         heroNode = SKSpriteNode(texture: heroIdleFrames.first)
         heroNode.setScale(2.5)
-        heroNode.position = CGPoint(x: 50, y: 68)
+        heroNode.position = CGPoint(x: 50, y: 76)
         addChild(heroNode)
 
         loadEnemyFrames(currentEnemy)
         enemyNode = SKSpriteNode(texture: enemyIdleFrames.first)
         enemyNode.setScale(2.5)
-        enemyNode.position = CGPoint(x: 150, y: 68)
+        enemyNode.position = CGPoint(x: 150, y: 76)
         enemyNode.xScale   = -2.5
         addChild(enemyNode)
 
@@ -205,6 +205,7 @@ class CombatScene: SKScene {
         guard isReady, !isHeroDeathPlaying else { return }
         let i = Int.random(in: 0..<heroAttackFrameSets.count)
         heroOneShot(heroAttackFrameSets[i], fps: 0.10)
+        SoundManager.shared.play(Bool.random() ? "sword_slice" : "sword_light")
         if let tex = heroProjectileTexture {
             run(.sequence([.wait(forDuration: 0.35),
                            .run { [weak self] in self?.fireProjectile(texture: tex, fromHero: true) }]))
@@ -214,6 +215,7 @@ class CombatScene: SKScene {
     func playHeroHurt() {
         guard isReady, !isHeroDeathPlaying else { return }
         heroOneShot(heroHurtFrames, fps: 0.12)
+        SoundManager.shared.play("punch_2")
     }
 
     func playHeroDeath() {
@@ -226,11 +228,13 @@ class CombatScene: SKScene {
     func playHeroBlock() {
         guard isReady, !isHeroDeathPlaying, !heroBlockFrames.isEmpty else { return }
         heroOneShot(heroBlockFrames, fps: 0.10)
+        SoundManager.shared.play("sword_clash")
     }
 
     func playHeroHeal() {
         guard isReady, !isHeroDeathPlaying, !heroHealFrames.isEmpty else { return }
         heroOneShot(heroHealFrames, fps: 0.12)
+        SoundManager.shared.play("heart_collect")
     }
 
     private func heroOneShot(_ frames: [SKTexture], fps: TimeInterval) {
@@ -256,6 +260,7 @@ class CombatScene: SKScene {
         guard isReady, !isEnemyDeathPlaying else { return }
         let i = Int.random(in: 0..<enemyAttackFrameSets.count)
         enemyOneShot(enemyAttackFrameSets[i], fps: 0.10)
+        SoundManager.shared.play("punch")
         if let tex = enemyProjectileTexture {
             run(.sequence([.wait(forDuration: 0.35),
                            .run { [weak self] in self?.fireProjectile(texture: tex, fromHero: false) }]))
@@ -270,6 +275,7 @@ class CombatScene: SKScene {
             .run { [weak self] in
                 guard let self, self.enemyGeneration == gen, !self.isEnemyDeathPlaying else { return }
                 self.enemyOneShot(self.enemyHurtFrames, fps: 0.12)
+                SoundManager.shared.play("crunch_quick")
             }
         ]))
     }
@@ -284,6 +290,7 @@ class CombatScene: SKScene {
                 guard let self, self.enemyGeneration == gen else { return }
                 self.enemyNode.removeAction(forKey: "anim")
                 self.enemyNode.run(.animate(with: self.enemyDeathFrames, timePerFrame: 0.15), withKey: "anim")
+                SoundManager.shared.play("crunch_quick")
             }
         ]))
     }
@@ -300,7 +307,7 @@ class CombatScene: SKScene {
         arrow.yScale    = 1.5
         arrow.xScale    = fromHero ? 1.5 : -1.5
         arrow.zPosition = 10
-        arrow.position  = fromHero ? CGPoint(x: 65, y: 62) : CGPoint(x: 135, y: 62)
+        arrow.position  = fromHero ? CGPoint(x: 65, y: 70) : CGPoint(x: 135, y: 70)
         let destX: CGFloat = fromHero ? 145 : 55
         arrow.run(.sequence([.moveTo(x: destX, duration: 0.28), .removeFromParent()]))
         addChild(arrow)
@@ -309,7 +316,7 @@ class CombatScene: SKScene {
     // MARK: - Floating combat text
 
     func showHeroDamage(_ amount: Int) {
-        floatText("-\(amount)", at: CGPoint(x: 44, y: 73),
+        floatText("-\(amount)", at: CGPoint(x: 44, y: 81),
                   color: UIColor(red: 1.0, green: 0.28, blue: 0.28, alpha: 1))
     }
 
@@ -317,7 +324,7 @@ class CombatScene: SKScene {
         run(.sequence([
             .wait(forDuration: heroHitDelay),
             .run { [weak self] in
-                self?.floatText("-\(amount)", at: CGPoint(x: 156, y: 73),
+                self?.floatText("-\(amount)", at: CGPoint(x: 156, y: 81),
                                 color: UIColor(red: 1.0, green: 0.60, blue: 0.15, alpha: 1))
             }
         ]))
@@ -327,7 +334,7 @@ class CombatScene: SKScene {
         run(.sequence([
             .wait(forDuration: heroHitDelay),
             .run { [weak self] in
-                self?.floatText("⚡\(amount)", at: CGPoint(x: 156, y: 73),
+                self?.floatText("⚡\(amount)", at: CGPoint(x: 156, y: 81),
                                 color: UIColor(red: 1.0, green: 0.88, blue: 0.12, alpha: 1),
                                 fontSize: 18)
             }
@@ -335,15 +342,16 @@ class CombatScene: SKScene {
     }
 
     func showHeroHeal(_ amount: Int) {
-        floatText("+\(amount)", at: CGPoint(x: 44, y: 73),
+        floatText("+\(amount)", at: CGPoint(x: 44, y: 81),
                   color: UIColor(red: 0.20, green: 0.90, blue: 0.38, alpha: 1))
     }
 
     func showGoldReward(_ amount: Int) {
         let wait  = SKAction.wait(forDuration: heroHitDelay + 0.38)
         let spawn = SKAction.run { [weak self] in
-            self?.floatText("+\(amount)g", at: CGPoint(x: 150, y: 53),
+            self?.floatText("+\(amount)g", at: CGPoint(x: 150, y: 61),
                             color: UIColor(red: 0.95, green: 0.82, blue: 0.10, alpha: 1))
+            SoundManager.shared.play("coin_collect")
         }
         run(.sequence([wait, spawn]))
     }

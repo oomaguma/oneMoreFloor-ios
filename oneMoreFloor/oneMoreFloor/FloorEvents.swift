@@ -13,6 +13,20 @@ struct ActiveEffect: Codable, Identifiable, Equatable {
     let regenMod: Int
 }
 
+// MARK: - Usable Item
+
+enum UsableItemKind: String, Codable {
+    case fullHeal
+    case revive
+}
+
+struct UsableItem: Codable, Identifiable, Equatable {
+    let id: UUID
+    let name: String
+    let icon: String
+    let kind: UsableItemKind
+}
+
 // MARK: - Floor Event
 
 struct FloorEvent: Codable, Identifiable {
@@ -29,10 +43,10 @@ struct FloorEvent: Codable, Identifiable {
 
 enum FloorEventTemplate: String, Codable, CaseIterable {
     // Blessings (free)
-    case ancientShrine, goldCache, atkBlessing, defBlessing, regenBlessing
+    case ancientShrine, goldCache, atkBlessing, defBlessing, regenBlessing, reviveBlessing
     // Shrines (pay gold for buff)
     case bloodPactAltar, ironForge, lifeVessel
-    // Curses (debuff, or pay gold to resist)
+    // Curses (50/50 gamble)
     case cursedSigil, witherTouch, voidFog
     // Mystery (random outcome)
     case strangeAltar
@@ -43,7 +57,7 @@ enum FloorEventTemplate: String, Codable, CaseIterable {
 
     var category: Category {
         switch self {
-        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing:
+        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing, .reviveBlessing:
             return .blessing
         case .bloodPactAltar, .ironForge, .lifeVessel:
             return .shrine
@@ -63,6 +77,7 @@ enum FloorEventTemplate: String, Codable, CaseIterable {
         case .atkBlessing:    return "⚔️"
         case .defBlessing:    return "🛡️"
         case .regenBlessing:  return "💉"
+        case .reviveBlessing: return "🔮"
         case .bloodPactAltar: return "🩸"
         case .ironForge:      return "⚒️"
         case .lifeVessel:     return "💎"
@@ -80,6 +95,7 @@ enum FloorEventTemplate: String, Codable, CaseIterable {
         case .atkBlessing:    return "War God's Mark"
         case .defBlessing:    return "Iron Will"
         case .regenBlessing:  return "Life Spring"
+        case .reviveBlessing: return "Phoenix Blessing"
         case .bloodPactAltar: return "Blood Pact Altar"
         case .ironForge:      return "Iron Forge"
         case .lifeVessel:     return "Life Vessel"
@@ -97,12 +113,13 @@ enum FloorEventTemplate: String, Codable, CaseIterable {
         case .atkBlessing:    return "Ancient runes burn bright, granting a warrior's strength."
         case .defBlessing:    return "A shimmering ward settles over your armor like cold iron."
         case .regenBlessing:  return "Enchanted water seeps from the stone, healing as you walk."
+        case .reviveBlessing: return "A spectral flame flickers above the shrine — death may not be the end."
         case .bloodPactAltar: return "A dark altar offers power in exchange for gold."
         case .ironForge:      return "A dwarven forge flickers — it can temper your defenses."
         case .lifeVessel:     return "A crystalline vessel pulses with lifegiving energy."
-        case .cursedSigil:    return "Dark runes sear into the stone before you."
-        case .witherTouch:    return "A spectral hand reaches out, hungry for your vitality."
-        case .voidFog:        return "A creeping mist drains your life force with every breath."
+        case .cursedSigil:    return "Dark runes pulse with wild energy — power or pain in equal measure."
+        case .witherTouch:    return "The spectral hand offers strength or sorrow. The choice is the gamble."
+        case .voidFog:        return "The mist churns unpredictably — boon or bane, you won't know until it's done."
         case .strangeAltar:   return "An unmarked altar hums with unknown energy. Risky — but tempting."
         }
     }
@@ -111,43 +128,42 @@ enum FloorEventTemplate: String, Codable, CaseIterable {
 
     var primaryLabel: String {
         switch self {
-        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing:
+        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing, .reviveBlessing:
             return "ACCEPT"
         case .bloodPactAltar, .ironForge: return "OFFER  50g"
         case .lifeVessel:                 return "OFFER  40g"
-        case .cursedSigil:                return "RESIST  60g"
-        case .witherTouch:                return "WARD  40g"
-        case .voidFog:                    return "FLEE  30g"
+        case .cursedSigil, .witherTouch, .voidFog:
+            return "GAMBLE"
         case .strangeAltar:               return "RISK IT  30g"
         }
     }
 
     var primaryGoldCost: Int {
         switch self {
-        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing:
+        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing, .reviveBlessing:
             return 0
         case .bloodPactAltar, .ironForge: return 50
         case .lifeVessel:                 return 40
-        case .cursedSigil:                return 60
-        case .witherTouch:                return 40
-        case .voidFog:                    return 30
+        case .cursedSigil, .witherTouch, .voidFog:
+            return 0
         case .strangeAltar:               return 30
         }
     }
 
     var primaryEffectSummary: String {
         switch self {
-        case .ancientShrine:  return "Restore HP to full"
+        case .ancientShrine:  return "Add Holy Vial to bag"
         case .goldCache:      return "+50 Gold"
         case .atkBlessing:    return "+2 ATK (this run)"
         case .defBlessing:    return "+2 DEF (this run)"
         case .regenBlessing:  return "+1 Regen (this run)"
+        case .reviveBlessing: return "Add Phoenix Charm to bag"
         case .bloodPactAltar: return "+5 ATK (this run)"
         case .ironForge:      return "+5 DEF (this run)"
         case .lifeVessel:     return "+40 Max HP (this run)"
-        case .cursedSigil:    return "Avoid −3 ATK curse"
-        case .witherTouch:    return "Avoid −15 Max HP curse"
-        case .voidFog:        return "Avoid losing 25% HP"
+        case .cursedSigil:    return "50% +3 ATK / 50% −3 ATK"
+        case .witherTouch:    return "50% +15 Max HP / 50% −15 Max HP"
+        case .voidFog:        return "50% heal 25% HP / 50% lose 25% HP"
         case .strangeAltar:   return "60% blessing / 40% curse"
         }
     }
@@ -156,39 +172,36 @@ enum FloorEventTemplate: String, Codable, CaseIterable {
 
     var secondaryLabel: String {
         switch self {
-        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing:
+        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing, .reviveBlessing:
             return "SKIP"
         case .bloodPactAltar, .ironForge, .lifeVessel, .strangeAltar:
             return "PASS"
-        case .cursedSigil, .witherTouch:
-            return "ACCEPT"
-        case .voidFog:
-            return "ENDURE"
+        case .cursedSigil, .witherTouch, .voidFog:
+            return "FLEE"
         }
     }
 
     var secondaryEffectSummary: String {
         switch self {
-        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing:
+        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing, .reviveBlessing:
             return "Nothing happens"
         case .bloodPactAltar, .ironForge, .lifeVessel, .strangeAltar:
             return "Nothing happens"
-        case .cursedSigil: return "−3 ATK (this run)"
-        case .witherTouch: return "−15 Max HP (this run)"
-        case .voidFog:     return "Lose 25% current HP"
+        case .cursedSigil, .witherTouch, .voidFog:
+            return "Nothing happens"
         }
     }
 
     // MARK: Pool
 
     static func random() -> FloorEventTemplate {
-        // Blessings are most common; curses less common; mystery rare
+        // Blessings most common; curses and shrines moderate; revive and mystery rare
         let pool: [FloorEventTemplate] = [
             .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing,
             .ancientShrine, .goldCache, .atkBlessing,   // extra weight for blessings
             .bloodPactAltar, .ironForge, .lifeVessel,
             .cursedSigil, .witherTouch, .voidFog,
-            .strangeAltar
+            .strangeAltar, .reviveBlessing              // revive is very rare
         ]
         return pool.randomElement()!
     }

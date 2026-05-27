@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		4224B5122FC7692700DCD2EF /* StoreKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4224B5112FC7692700DCD2EF /* StoreKit.framework */; };
 		42D121572FBF633C00A022F9 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 42D121562FBF633C00A022F9 /* GoogleMobileAds */; };
 		42D1215B2FBF670A00A022F9 /* AdManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42D1215A2FBF670A00A022F9 /* AdManager.swift */; };
 /* End PBXBuildFile section */
@@ -29,6 +30,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		4224B5112FC7692700DCD2EF /* StoreKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = StoreKit.framework; path = System/Library/Frameworks/StoreKit.framework; sourceTree = SDKROOT; };
 		42D11E9D2FBE13D900A022F9 /* oneMoreFloor.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = oneMoreFloor.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		42D11EB62FBE13DB00A022F9 /* oneMoreFloorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = oneMoreFloorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		42D11EC02FBE13DB00A022F9 /* oneMoreFloorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = oneMoreFloorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -75,6 +77,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				42D121572FBF633C00A022F9 /* GoogleMobileAds in Frameworks */,
+				4224B5122FC7692700DCD2EF /* StoreKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -95,6 +98,14 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		4224B5102FC7692700DCD2EF /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				4224B5112FC7692700DCD2EF /* StoreKit.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		42D11E942FBE13D900A022F9 = {
 			isa = PBXGroup;
 			children = (
@@ -103,6 +114,7 @@
 				42D11EC32FBE13DB00A022F9 /* letsMakeAGameUITests */,
 				42D11E9E2FBE13D900A022F9 /* Products */,
 				42D1215A2FBF670A00A022F9 /* AdManager.swift */,
+				4224B5102FC7692700DCD2EF /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -315,6 +327,7 @@
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -349,6 +362,7 @@
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

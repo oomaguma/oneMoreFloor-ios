@@ -123,7 +123,7 @@ struct TitleScreenView: View {
 
     private func titleButton(_ label: String, fill: Color, action: @escaping () -> Void) -> some View {
         Button {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            Haptics.impact(.medium)
             action()
         } label: {
             Text(label)
@@ -300,12 +300,13 @@ struct GameView: View {
     @State private var spriteOpacity    = 1.0
     @State private var isFading         = false
     @State private var offlineSummary: OfflineSummary?
-    @State private var adManager        = AdManager()
+    private let adManager               = AdManager.shared
     @State private var selectedTab: GameTab = .battle
     // true only after didEnterBackground fires; prevents spurious summaries from
     // temporary interruptions (phone calls, notification banners, control center)
     @State private var didEnterBackground = false
-    @State private var showStore = false
+    @State private var showStore    = false
+    @State private var showSettings = false
 
     init(character: CharacterClass, onChangeCharacter: @escaping () -> Void) {
         self.character = character
@@ -324,6 +325,15 @@ struct GameView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     StatusBarView(game: game)
+                    Button { showSettings = true } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color.white.opacity(0.60))
+                            .frame(width: 44, height: 44)
+                            .background(Color(white: 0.11))
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.09), lineWidth: 1))
+                    }
                     Button { showStore = true } label: {
                         Image(systemName: "cart.fill")
                             .font(.system(size: 16))
@@ -337,6 +347,7 @@ struct GameView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .sheet(isPresented: $showStore) { StoreSheetView() }
+                .sheet(isPresented: $showSettings) { SettingsView() }
 
                 BattleTabView(game: game, combatScene: combatScene, spriteOpacity: spriteOpacity)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -412,15 +423,16 @@ struct GameView: View {
             game.onHeroHurt = { combatScene.playHeroHurt() }
             game.onHeroDeath = {
                 combatScene.playHeroDeath()
-                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                SoundManager.shared.play("8_bit_defeated")
+                Haptics.notify(.error)
             }
             game.onHeroBlock = {
                 combatScene.playHeroBlock()
-                UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+                Haptics.impact(.rigid)
             }
             game.onHeroCrit = { dmg in
                 combatScene.showMonsterCritDamage(dmg)
-                UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+                Haptics.impact(.heavy)
             }
             game.onHeroHeal = { amt in
                 combatScene.showHeroHeal(amt)
@@ -440,13 +452,19 @@ struct GameView: View {
             game.log("Combat begins shortly.")
         }
         .onChange(of: game.pendingBossVictory != nil) { _, hasVictory in
-            if hasVictory { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+            if hasVictory {
+                SoundManager.shared.play("8_bit_positive_long")
+                Haptics.notify(.success)
+            }
         }
         .onChange(of: game.pendingZoneUnlock != nil) { _, hasUnlock in
-            if hasUnlock { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+            if hasUnlock { Haptics.notify(.success) }
         }
         .onChange(of: game.pendingDrop?.id) { _, newID in
-            if newID != nil { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+            if newID != nil {
+                SoundManager.shared.play("item_equip")
+                Haptics.impact(.medium)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
             // Save state on any inactivity (phone calls, banners, etc.) for crash safety.
@@ -570,6 +588,13 @@ struct OfflineSummaryView: View {
                         summaryRow("Deaths", "\(summary.deaths)",
                                    Color(red: 1.0, green: 0.38, blue: 0.38))
                     }
+                }
+
+                if summary.stoppedByDeath {
+                    Text("Unlock Undying Will to keep earning gold after death")
+                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.4))
+                        .multilineTextAlignment(.center)
                 }
 
                 if summary.goldEarned > 0 {
@@ -961,6 +986,7 @@ struct BattleTabView: View {
             CombatStatusView(game: game)
             MapView(game: game)
             ActiveEffectsBarView(game: game)
+            ConsumablesBarView(game: game)
             if let event = game.pendingFloorEvent {
                 FloorEventCardView(game: game, event: event)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -1026,6 +1052,47 @@ struct ActiveEffectsBarView: View {
                                       lineWidth: 1)
                 )
         )
+    }
+}
+
+// MARK: - Consumables Bar
+
+struct ConsumablesBarView: View {
+    let game: DungeonGame
+
+    var body: some View {
+        let vials = game.usableItems.filter { $0.kind == .fullHeal }
+        if !vials.isEmpty {
+            HStack(spacing: 8) {
+                ForEach(vials) { vial in
+                    Button { game.useItem(vial) } label: {
+                        HStack(spacing: 5) {
+                            Text(vial.icon)
+                                .font(.system(size: 13))
+                            Text("Holy Vial")
+                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.white)
+                            Text("USE")
+                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Color(red: 0.4, green: 0.95, blue: 0.55))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color(red: 0.05, green: 0.18, blue: 0.08))
+                                .overlay(RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(Color(red: 0.25, green: 0.65, blue: 0.3), lineWidth: 1))
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .opacity(game.isGameOver ? 0.35 : 1.0)
+                    .disabled(game.isGameOver)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+        }
     }
 }
 
@@ -1250,7 +1317,7 @@ private struct CustomGameTabBar: View {
         let showBadge  = def.tab == .quests && hasClaimableQuest
 
         return Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            Haptics.impact(.light)
             selectedTab = def.tab
         } label: {
             VStack(spacing: 3) {
@@ -1288,7 +1355,7 @@ private struct CustomGameTabBar: View {
         let isSelected = selectedTab == .battle
 
         return Button {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            Haptics.impact(.light)
             selectedTab = .battle
         } label: {
             VStack(spacing: 4) {
@@ -1333,6 +1400,7 @@ struct UpgradesTabView: View {
                         unlockZoneName: unlockZone
                     ) {
                         game.buyUpgrade(id: upgrade.id)
+                        SoundManager.shared.play("weapon_upgrade")
                     }
                 }
             }
@@ -1369,6 +1437,7 @@ struct PrestigeTabView: View {
                         canAfford: game.soulShards >= upgrade.shardCost
                     ) {
                         game.buyPrestigeUpgrade(id: upgrade.id)
+                        SoundManager.shared.play("8_bit_chime_positive")
                     }
                 }
 
@@ -1696,6 +1765,24 @@ struct ItemsTabView: View {
             // Scrollable inventory
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
+                    let charms = game.usableItems.filter { $0.kind == .revive }
+                    if !charms.isEmpty {
+                        Text("CONSUMABLES  \(game.usableItems.count)/\(DungeonGame.usableItemLimit)")
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.50))
+                            .padding(.horizontal, 4)
+
+                        ForEach(charms) { item in
+                            UsableItemView(item: item, onUse: { game.useItem(item) })
+                        }
+
+                        if !game.inventory.isEmpty {
+                            Divider()
+                                .background(Color.white.opacity(0.10))
+                                .padding(.vertical, 4)
+                        }
+                    }
+
                     if !game.inventory.isEmpty {
                         Text("INVENTORY  \(game.inventory.count)/\(EquipmentDrop.inventoryLimit)")
                             .font(.system(size: 10, weight: .semibold, design: .monospaced))
@@ -1709,7 +1796,7 @@ struct ItemsTabView: View {
                                 onSell:  { game.sellItem(item) }
                             )
                         }
-                    } else if game.equippedItems.isEmpty {
+                    } else if game.equippedItems.isEmpty && charms.isEmpty {
                         Text("Items drop from enemies as you fight.\nCheck back after a few battles.")
                             .font(.system(size: 13, design: .monospaced))
                             .foregroundStyle(Color.white.opacity(0.40))
@@ -1829,6 +1916,62 @@ struct EquippedGearCard: View {
         case .armor:  return "square.stack.3d.up"
         case .ring:   return "circle.circle"
         }
+    }
+}
+
+// MARK: - Usable Item Row
+
+struct UsableItemView: View {
+    let item: UsableItem
+    let onUse: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(item.icon)
+                .font(.system(size: 26))
+                .frame(width: 44, height: 44)
+                .background(Color.white.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.name)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.white)
+                Text(item.kind == .fullHeal ? "Restore HP to full" : "Auto-triggers on death")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.55))
+            }
+
+            Spacer()
+
+            if item.kind == .fullHeal {
+                Button(action: onUse) {
+                    Text("USE")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(Color(red: 0.18, green: 0.42, blue: 0.22))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text("AUTO")
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(Color(red: 0.60, green: 0.45, blue: 0.95))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color(red: 0.60, green: 0.45, blue: 0.95).opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(white: 0.09))
+                .overlay(RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color(red: 0.55, green: 0.55, blue: 1.0).opacity(0.30), lineWidth: 1))
+        )
     }
 }
 
