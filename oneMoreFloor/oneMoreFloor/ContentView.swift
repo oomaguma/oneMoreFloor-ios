@@ -474,7 +474,10 @@ struct GameView: View {
             // Record that we truly entered background so the foreground handler can
             // distinguish a real background session from a brief interruption.
             didEnterBackground = true
-            if let seconds = game.estimatedSecondsUntilFirstDeath() {
+            // Skip the "hero has fallen" notification for players who bought Remove Ads,
+            // since they get a free revive and the character carries on automatically.
+            if !StoreManager.shared.hasPurchasedRemoveAds,
+               let seconds = game.estimatedSecondsUntilFirstDeath() {
                 NotificationManager.shared.scheduleDeathNotification(in: seconds, characterName: game.character.name)
             }
         }
