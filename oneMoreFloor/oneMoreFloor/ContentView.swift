@@ -1294,26 +1294,28 @@ private struct CustomGameTabBar: View {
         .init(tab: .quests,   label: "QUESTS",   icon: "scroll.fill"),
     ]
 
-    private let barColor        = Color(red: 0.09, green: 0.09, blue: 0.14)
+    private let barColor        = Color(red: 0.07, green: 0.07, blue: 0.11)
     private let selectedColor   = Color(red: 0.90, green: 0.70, blue: 0.28)
     private let unselectedColor = Color.white.opacity(0.38)
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 0) {
+        HStack(spacing: 0) {
             ForEach(tabs, id: \.label) { def in
-                if def.tab == .battle {
-                    raisedBattleButton(def)
-                } else {
-                    tabButton(def)
-                }
+                tabButton(def)
             }
         }
         .frame(height: 56)
         .background(barColor.ignoresSafeArea(edges: .bottom))
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(Color.white.opacity(0.10))
+                .frame(height: 1)
+        }
     }
 
     private func tabButton(_ def: TabDef) -> some View {
         let isSelected = selectedTab == def.tab
+        let isBattle   = def.tab == .battle
         let showBadge  = def.tab == .quests && hasClaimableQuest
 
         return Button {
@@ -1323,7 +1325,7 @@ private struct CustomGameTabBar: View {
             VStack(spacing: 3) {
                 ZStack(alignment: .topTrailing) {
                     Image(systemName: def.icon)
-                        .font(.system(size: 19, weight: isSelected ? .semibold : .regular))
+                        .font(.system(size: isBattle ? 22 : 18, weight: isSelected ? .semibold : .regular))
                         .foregroundStyle(isSelected ? selectedColor : unselectedColor)
                         .frame(width: 28, height: 24)
 
@@ -1343,37 +1345,11 @@ private struct CustomGameTabBar: View {
             .padding(.top, 8)
             .padding(.bottom, 6)
             .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(isSelected ? selectedColor : Color.white.opacity(0.10))
-                    .frame(height: isSelected ? 2 : 1)
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func raisedBattleButton(_ def: TabDef) -> some View {
-        let isSelected = selectedTab == .battle
-
-        return Button {
-            Haptics.impact(.light)
-            selectedTab = .battle
-        } label: {
-            VStack(spacing: 4) {
-                Image(systemName: def.icon)
-                    .font(.system(size: 26, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? selectedColor : unselectedColor)
-                Text(def.label)
-                    .font(.system(size: 8, weight: isSelected ? .bold : .regular, design: .monospaced))
-                    .foregroundStyle(isSelected ? selectedColor : unselectedColor)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.bottom, 6)
-            .frame(height: 76)
-            .background(barColor)
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(isSelected ? selectedColor : Color.white.opacity(0.10))
-                    .frame(height: isSelected ? 2 : 1)
+                if isSelected {
+                    Capsule()
+                        .fill(selectedColor)
+                        .frame(width: 20, height: 2)
+                }
             }
         }
         .buttonStyle(.plain)
