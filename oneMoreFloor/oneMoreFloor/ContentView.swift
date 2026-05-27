@@ -593,7 +593,9 @@ struct OfflineSummaryView: View {
 
                 VStack(spacing: 12) {
                     if summary.goldEarned > 0 {
-                        summaryRow("Gold Earned", "+\(summary.goldEarned)g", .yellow)
+                        summaryRow("Gold Earned",
+                                   didDoubleGold ? "+\(summary.goldEarned * 2)g" : "+\(summary.goldEarned)g",
+                                   .yellow)
                     }
                     if summary.floorsCleared > 0 {
                         summaryRow("Floors Cleared", "\(summary.floorsCleared)", .white)
