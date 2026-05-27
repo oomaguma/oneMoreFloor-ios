@@ -318,6 +318,7 @@ struct GameView: View {
     @State private var didEnterBackground = false
     @State private var showStore    = false
     @State private var showSettings = false
+    @AppStorage("com.oneMoreFloor.notificationsEnabled") private var notificationsEnabled = true
 
     init(character: CharacterClass, onChangeCharacter: @escaping () -> Void) {
         self.character = character
@@ -485,9 +486,10 @@ struct GameView: View {
             // Record that we truly entered background so the foreground handler can
             // distinguish a real background session from a brief interruption.
             didEnterBackground = true
-            // Skip the "hero has fallen" notification for players who bought Remove Ads,
-            // since they get a free revive and the character carries on automatically.
-            if !StoreManager.shared.hasPurchasedRemoveAds,
+            // Skip the "hero has fallen" notification when the player opted out, or for
+            // Remove Ads buyers since they get a free revive and the character carries on.
+            if notificationsEnabled,
+               !StoreManager.shared.hasPurchasedRemoveAds,
                let seconds = game.estimatedSecondsUntilFirstDeath() {
                 NotificationManager.shared.scheduleDeathNotification(in: seconds, characterName: game.character.name)
             }

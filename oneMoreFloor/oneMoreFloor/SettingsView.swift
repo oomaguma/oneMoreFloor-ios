@@ -7,8 +7,9 @@ private let rowColor  = Color(white: 0.10)
 private let navColor  = Color(red: 0.09, green: 0.09, blue: 0.14)
 
 struct SettingsView: View {
-    @AppStorage("com.oneMoreFloor.soundEnabled")   private var soundEnabled   = true
-    @AppStorage("com.oneMoreFloor.hapticsEnabled") private var hapticsEnabled = true
+    @AppStorage("com.oneMoreFloor.soundEnabled")         private var soundEnabled         = true
+    @AppStorage("com.oneMoreFloor.hapticsEnabled")       private var hapticsEnabled       = true
+    @AppStorage("com.oneMoreFloor.notificationsEnabled") private var notificationsEnabled = true
 
     var body: some View {
         NavigationStack {
@@ -20,6 +21,10 @@ struct SettingsView: View {
                     .listRowBackground(rowColor)
                     Toggle(isOn: $hapticsEnabled) {
                         Label("Vibration", systemImage: "iphone.radiowaves.left.and.right")
+                    }
+                    .listRowBackground(rowColor)
+                    Toggle(isOn: $notificationsEnabled) {
+                        Label("Notifications", systemImage: "bell.fill")
                     }
                     .listRowBackground(rowColor)
                 }
