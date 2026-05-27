@@ -1264,13 +1264,19 @@ class DungeonGame {
                 ticksUntilFight -= 1
                 if ticksUntilFight <= 0 {
                     let zoneID = DungeonGame.zones.last(where: { currentFloor >= $0.minFloor })?.id ?? "entrance"
-                    let pool   = DungeonGame.zoneEnemyPools[zoneID] ?? [.skeleton]
-                    let enemy  = pool.randomElement()!
+                    let isBoss = DungeonGame.isBoss(floor: currentFloor)
+                    let enemy: EnemyType
+                    if isBoss, let bossEnemy = DungeonGame.zoneBossEnemies[zoneID] {
+                        enemy = bossEnemy
+                    } else {
+                        let pool = DungeonGame.zoneEnemyPools[zoneID] ?? [.skeleton]
+                        enemy = pool.randomElement()!
+                    }
                     currentEnemyType = enemy
                     monsterName  = enemy.name
-                    monsterMaxHp = enemy.hp(floor: currentFloor)
+                    monsterMaxHp = isBoss ? Int(Double(enemy.hp(floor: currentFloor)) * 2.5) : enemy.hp(floor: currentFloor)
                     monsterHp    = monsterMaxHp
-                    monsterAtk   = enemy.atk(floor: currentFloor)
+                    monsterAtk   = isBoss ? Int(Double(enemy.atk(floor: currentFloor)) * 1.5) : enemy.atk(floor: currentFloor)
                     inCombat     = true
                 }
             }
