@@ -166,7 +166,18 @@ struct CharacterSelectView: View {
                     .font(.system(size: 18, weight: .bold, design: .monospaced))
                     .foregroundStyle(.white)
                     .padding(.top, 52)
-                    .padding(.bottom, 20)
+                    .padding(.bottom, onCancel == nil ? 20 : 12)
+
+                // Only shown when swapping an existing hero (reached from the prestige tab),
+                // where confirming a new pick wipes the current run's progress.
+                if onCancel != nil {
+                    Text("Warning: changing your hero resets all progress.")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color(red: 1.00, green: 0.45, blue: 0.25))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                }
 
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 12) {
