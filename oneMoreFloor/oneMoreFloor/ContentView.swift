@@ -166,7 +166,18 @@ struct CharacterSelectView: View {
                     .font(.system(size: 18, weight: .bold, design: .monospaced))
                     .foregroundStyle(.white)
                     .padding(.top, 52)
-                    .padding(.bottom, 20)
+                    .padding(.bottom, onCancel == nil ? 20 : 12)
+
+                // Only shown when swapping an existing hero (reached from the prestige tab),
+                // where confirming a new pick wipes the current run's progress.
+                if onCancel != nil {
+                    Text("Warning: changing your hero resets all progress.")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color(red: 1.00, green: 0.45, blue: 0.25))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                }
 
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 12) {
@@ -307,6 +318,7 @@ struct GameView: View {
     @State private var didEnterBackground = false
     @State private var showStore    = false
     @State private var showSettings = false
+    @AppStorage("com.oneMoreFloor.notificationsEnabled") private var notificationsEnabled = true
 
     init(character: CharacterClass, onChangeCharacter: @escaping () -> Void) {
         self.character = character
@@ -474,7 +486,11 @@ struct GameView: View {
             // Record that we truly entered background so the foreground handler can
             // distinguish a real background session from a brief interruption.
             didEnterBackground = true
-            if let seconds = game.estimatedSecondsUntilFirstDeath() {
+            // Skip the "hero has fallen" notification when the player opted out, or for
+            // Remove Ads buyers since they get a free revive and the character carries on.
+            if notificationsEnabled,
+               !StoreManager.shared.hasPurchasedRemoveAds,
+               let seconds = game.estimatedSecondsUntilFirstDeath() {
                 NotificationManager.shared.scheduleDeathNotification(in: seconds, characterName: game.character.name)
             }
         }
