@@ -36,6 +36,7 @@
 		42D11EB62FBE13DB00A022F9 /* oneMoreFloorTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = oneMoreFloorTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		42D11EC02FBE13DB00A022F9 /* oneMoreFloorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = oneMoreFloorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		42D1215A2FBF670A00A022F9 /* AdManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdManager.swift; sourceTree = "<group>"; };
+		42D9C4272FD0686500DB3CBD /* oneMoreFloor.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = oneMoreFloor.entitlements; path = oneMoreFloor/oneMoreFloor.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -111,6 +112,7 @@
 		42D11E942FBE13D900A022F9 = {
 			isa = PBXGroup;
 			children = (
+				42D9C4272FD0686500DB3CBD /* oneMoreFloor.entitlements */,
 				42D11E9F2FBE13D900A022F9 /* letsMakeAGame */,
 				42D11EB92FBE13DB00A022F9 /* letsMakeAGameTests */,
 				42D11EC32FBE13DB00A022F9 /* letsMakeAGameUITests */,
@@ -319,6 +321,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = oneMoreFloor/oneMoreFloor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6VD588E99S;
@@ -341,6 +344,10 @@
 				PRODUCT_BUNDLE_IDENTIFIER = jmyers.oneMoreFloor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -355,6 +362,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = oneMoreFloor/oneMoreFloor.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 6VD588E99S;
@@ -377,6 +385,10 @@
 				PRODUCT_BUNDLE_IDENTIFIER = jmyers.oneMoreFloor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;

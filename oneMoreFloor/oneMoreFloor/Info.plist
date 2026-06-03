@@ -28,5 +28,9 @@
 		<key>UIColorName</key>
 		<string>Black</string>
 	</dict>
+	<!-- Opt out of iPad multitasking (split view / slide over).
+	     Required when the app only supports portrait orientation. -->
+	<key>UIRequiresFullScreen</key>
+	<true/>
 </dict>
 </plist>

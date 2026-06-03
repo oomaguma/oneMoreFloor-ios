@@ -133,6 +133,7 @@ class DungeonGame {
     }
 
     private(set) var retiredCharacterIDs: [String] = []
+    private(set) var totalPrestiges: Int = 0
 
     var legacyHpBonus: Int {
         retiredCharacterIDs.reduce(0) { sum, id in sum + (CharacterClass.all.first { c in c.id == id }?.legacyBonus.hp ?? 0) }
@@ -461,6 +462,12 @@ class DungeonGame {
                zone.minFloor > 1, currentFloor > prevDeepest {
                 pendingZoneUnlock = zone
                 Analytics.zoneUnlocked(zoneID: zone.id, zoneName: zone.name)
+                GameCenterManager.shared.reportAchievement(GCAchievement.firstZone)
+            }
+
+            // Game Center — submit score and check floor achievements when breaking personal best
+            if currentFloor > prevDeepest {
+                checkGameCenterFloorMilestones(prevDeepest: prevDeepest)
             }
 
             if isCrit { onHeroCrit?(heroDmg) } else { onMonsterDamageTaken?(heroDmg) }
@@ -589,7 +596,16 @@ class DungeonGame {
 
         let earned = prestigeShardValue()
         soulShards += earned
+        totalPrestiges += 1
         Analytics.prestigeCompleted(shardsEarned: earned, totalShards: soulShards, deepestFloor: deepestFloor)
+
+        // Game Center — prestige leaderboards and achievements
+        let gc = GameCenterManager.shared
+        gc.submitScore(totalPrestiges, to: GCLeaderboard.prestigeCount)
+        gc.submitScore(soulShards, to: GCLeaderboard.soulShards)
+        if totalPrestiges == 1  { gc.reportAchievement(GCAchievement.firstPrestige) }
+        if totalPrestiges == 5  { gc.reportAchievement(GCAchievement.prestige5) }
+        if totalPrestiges == 10 { gc.reportAchievement(GCAchievement.prestige10) }
 
         log("=== PRESTIGE ===")
         if let newChar = newCharacter {
@@ -675,6 +691,13 @@ class DungeonGame {
         applyBonuses(of: item)
         updateSetBonus()
         log("Equipped \(item.rarity.label) \(item.name) [\(item.statSummary)]")
+
+        // Game Center — equipment achievements
+        let gc = GameCenterManager.shared
+        gc.reportAchievement(GCAchievement.firstEquip)
+        if equippedItems.count == EquipmentSlot.allCases.count {
+            gc.reportAchievement(GCAchievement.allSlots)
+        }
     }
 
     func unequip(slot: EquipmentSlot) {
@@ -716,6 +739,25 @@ class DungeonGame {
         item.atkBonus + item.defBonus + item.hpBonus + item.regenBonus * 5
     }
 
+    // MARK: - Game Center
+
+    private func checkGameCenterFloorMilestones(prevDeepest: Int) {
+        let gc = GameCenterManager.shared
+        gc.submitScore(deepestFloorEver, to: GCLeaderboard.deepestFloor)
+
+        // Each milestone fires once — when deepestFloorEver crosses the threshold for the first time
+        let milestones: [(Int, String)] = [
+            (10,  GCAchievement.floor10),
+            (25,  GCAchievement.floor25),
+            (50,  GCAchievement.floor50),
+            (100, GCAchievement.floor100)
+        ]
+        for (threshold, achievementID) in milestones
+        where prevDeepest < threshold && deepestFloorEver >= threshold {
+            gc.reportAchievement(achievementID)
+        }
+    }
+
     // MARK: - Floor Events
 
     private func checkForFloorEvent() {
@@ -724,7 +766,15 @@ class DungeonGame {
               !DungeonGame.isBoss(floor: currentFloor),
               currentFloor > 1 else { return }
         guard Double.random(in: 0...1) < 0.22 else { return }
-        pendingFloorEvent = FloorEvent(template: FloorEventTemplate.random())
+        // Reroll up to 10 times to find an event the player can afford
+        for _ in 0..<10 {
+            let template = FloorEventTemplate.random()
+            if template.primaryGoldCost == 0 || gold >= template.primaryGoldCost {
+                pendingFloorEvent = FloorEvent(template: template)
+                return
+            }
+        }
+        // All candidates were unaffordable — skip the event this floor
     }
 
     func resolveFloorEvent(primary: Bool) {
@@ -1101,7 +1151,7 @@ class DungeonGame {
         log("Quest: \(dailyQuests[i].title) — +\(dailyQuests[i].rewardGold)g!")
     }
 
-    static let dailyCompletionBonusShards = 1
+    static let dailyCompletionBonusShards = 20
 
     func claimDailyCompletionBonus() {
         guard allQuestsClaimed, !dailyCompletionBonusClaimed else { return }
@@ -1141,6 +1191,8 @@ class DungeonGame {
         var usableItems: [UsableItem]?
         // v7 additions (optional for backwards compatibility)
         var retiredCharacterIDs: [String]?
+        // v8 additions (optional for backwards compatibility)
+        var totalPrestiges: Int?
     }
 
     private static let saveKey = "dungeonSave_v2"
@@ -1182,7 +1234,8 @@ class DungeonGame {
             pendingFloorEvent: pendingFloorEvent,
             dailyCompletionBonusClaimed: dailyCompletionBonusClaimed,
             usableItems: usableItems,
-            retiredCharacterIDs: retiredCharacterIDs
+            retiredCharacterIDs: retiredCharacterIDs,
+            totalPrestiges: totalPrestiges
         )
         if let encoded = try? JSONEncoder().encode(data) {
             UserDefaults.standard.set(encoded, forKey: Self.saveKey)
@@ -1247,6 +1300,7 @@ class DungeonGame {
         activeEffects        = data.activeEffects        ?? []
         pendingFloorEvent    = data.pendingFloorEvent
         retiredCharacterIDs  = data.retiredCharacterIDs  ?? []
+        totalPrestiges       = data.totalPrestiges       ?? 0
 
         displayMonsterHp    = inCombat ? max(0, monsterHp) : 0
         displayMonsterMaxHp = inCombat ? monsterMaxHp : 0

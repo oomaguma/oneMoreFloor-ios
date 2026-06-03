@@ -433,7 +433,8 @@ struct GameView: View {
                 CustomGameTabBar(selectedTab: $selectedTab, hasClaimableQuest: game.hasClaimableQuest)
             }
 
-            if let drop = game.pendingDrop, game.pendingBossVictory == nil {
+            // Item drop banner — non-blocking top banner; hidden when a full-screen overlay is up
+            if let drop = game.pendingDrop, !isAnyFullScreenOverlayActive {
                 VStack {
                     ItemDropBanner(item: drop, onDismiss: { game.dismissDrop() })
                         .transition(.move(edge: .top).combined(with: .opacity))
@@ -444,7 +445,12 @@ struct GameView: View {
                 .animation(.spring(response: 0.4), value: game.pendingDrop?.id)
             }
 
-            if game.isGameOver && !game.autoRestartEnabled {
+            // Full-screen overlays in strict priority order — only one is ever shown at a time
+            if let victory = game.pendingBossVictory {
+                BossVictoryOverlay(victory: victory) { game.dismissBossVictory() }
+            } else if let zone = game.pendingZoneUnlock {
+                ZoneUnlockOverlay(zone: zone) { game.dismissZoneUnlock() }
+            } else if game.isGameOver && !game.autoRestartEnabled {
                 GameOverOverlay(
                     adManager: adManager,
                     onRevive: {
@@ -459,23 +465,25 @@ struct GameView: View {
                         combatScene.playEnemyIdle()
                     }
                 )
-            }
-
-            if let summary = offlineSummary {
+            } else if let summary = offlineSummary {
                 OfflineSummaryView(
                     summary: summary,
                     adManager: adManager,
                     onDoubleGold: { game.gold += summary.goldEarned },
                     onDismiss: { offlineSummary = nil }
                 )
-            }
-
-            if let victory = game.pendingBossVictory {
-                BossVictoryOverlay(victory: victory) { game.dismissBossVictory() }
-            }
-
-            if game.pendingBossVictory == nil, let zone = game.pendingZoneUnlock {
-                ZoneUnlockOverlay(zone: zone) { game.dismissZoneUnlock() }
+            } else if let event = game.pendingFloorEvent {
+                ZStack {
+                    Color.black.opacity(0.55)
+                        .ignoresSafeArea()
+                    VStack {
+                        Spacer()
+                        FloorEventCardView(game: game, event: event)
+                            .padding(.bottom, 16)
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .animation(.spring(response: 0.5, dampingFraction: 0.8), value: event.id)
             }
         }
         .sheet(isPresented: showSheet) {
@@ -611,6 +619,15 @@ struct GameView: View {
         }
     }
 
+    // True whenever any full-screen overlay is displayed, so the item drop banner stays hidden
+    private var isAnyFullScreenOverlayActive: Bool {
+        game.pendingBossVictory != nil ||
+        game.pendingZoneUnlock != nil ||
+        (game.isGameOver && !game.autoRestartEnabled) ||
+        offlineSummary != nil ||
+        game.pendingFloorEvent != nil
+    }
+
     private var showSheet: Binding<Bool> {
         Binding(
             get: { selectedTab != .battle },
@@ -696,7 +713,14 @@ struct OfflineSummaryView: View {
                             }
                         } label: {
                             HStack(spacing: 8) {
-                                Image(systemName: "play.circle.fill")
+                                if adManager.isOfflineAdReady {
+                                    Image(systemName: "play.circle.fill")
+                                } else {
+                                    ProgressView()
+                                        .progressViewStyle(.circular)
+                                        .tint(Color.white.opacity(0.50))
+                                        .scaleEffect(0.8)
+                                }
                                 Text(adManager.isOfflineAdReady ? "WATCH AD — 2× GOLD" : "LOADING AD...")
                             }
                             .font(.system(size: 14, weight: .semibold, design: .monospaced))
@@ -800,7 +824,14 @@ struct GameOverOverlay: View {
                         adManager.showReviveAd(onReward: onRevive)
                     } label: {
                         HStack(spacing: 8) {
-                            Image(systemName: "play.circle.fill")
+                            if adManager.isReviveAdReady {
+                                Image(systemName: "play.circle.fill")
+                            } else {
+                                ProgressView()
+                                    .progressViewStyle(.circular)
+                                    .tint(Color.white.opacity(0.50))
+                                    .scaleEffect(0.8)
+                            }
                             Text(adManager.isReviveAdReady ? "WATCH AD — REVIVE AT FULL HP" : "LOADING AD...")
                         }
                         .font(.system(size: 14, weight: .semibold, design: .monospaced))
@@ -1078,23 +1109,17 @@ struct BattleTabView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                SpriteView(scene: combatScene, options: [.allowsTransparency])
-                    .frame(height: horizontalSizeClass == .regular ? 380 : 260)
-                    .frame(maxWidth: 560)
-                    .frame(maxWidth: .infinity)
-                    .opacity(spriteOpacity)
-                CombatStatusView(game: game)
-                MapView(game: game)
-                ActiveEffectsBarView(game: game)
-                ConsumablesBarView(game: game)
-                if let event = game.pendingFloorEvent {
-                    FloorEventCardView(game: game, event: event)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: game.pendingFloorEvent?.id)
+        VStack(spacing: 0) {
+            SpriteView(scene: combatScene, options: [.allowsTransparency])
+                .frame(height: horizontalSizeClass == .regular ? 380 : 260)
+                .frame(maxWidth: 560)
+                .frame(maxWidth: .infinity)
+                .opacity(spriteOpacity)
+            CombatStatusView(game: game)
+            MapView(game: game)
+            ActiveEffectsBarView(game: game)
+            ConsumablesBarView(game: game)
+            Spacer()
         }
         .background(Color(red: 0.07, green: 0.07, blue: 0.11))
     }
@@ -1171,7 +1196,7 @@ struct ConsumablesBarView: View {
                         HStack(spacing: 5) {
                             Text(vial.icon)
                                 .font(.system(size: 13))
-                            Text("Holy Vial")
+                            Text(vial.name)
                                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(.white)
                             Text("USE")
@@ -1311,7 +1336,7 @@ struct FloorEventCardView: View {
                     label: t.secondaryLabel,
                     summary: t.secondaryEffectSummary,
                     active: true,
-                    accent: Color.white.opacity(0.35)
+                    accent: Color(red: 0.40, green: 0.65, blue: 0.95)
                 ) { game.resolveFloorEvent(primary: false) }
             }
         }
@@ -1436,8 +1461,10 @@ private struct CustomGameTabBar: View {
                             .fill(Color(red: 1.0, green: 0.35, blue: 0.35))
                             .frame(width: 7, height: 7)
                             .offset(x: 5, y: -2)
+                            .transition(.scale.combined(with: .opacity))
                     }
                 }
+                .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showBadge)
 
                 Text(def.label)
                     .font(.system(size: 10, weight: isSelected ? .bold : .regular, design: .monospaced))
@@ -2096,9 +2123,9 @@ struct EquippedGearCard: View {
 
     private var slotSymbol: String {
         switch slot {
-        case .weapon: return "shield.lefthalf.filled"
-        case .armor:  return "square.stack.3d.up"
-        case .ring:   return "circle.circle"
+        case .weapon: return "sword"
+        case .armor:  return "shield.fill"
+        case .ring:   return "seal.fill"
         }
     }
 }
@@ -2499,6 +2526,7 @@ struct QuestsTabView: View {
 
                 if !game.dailyQuests.isEmpty {
                     DailyCompletionBonusView(
+                        questCount: game.dailyQuests.count,
                         allClaimed: game.allQuestsClaimed,
                         bonusClaimed: game.dailyCompletionBonusClaimed
                     ) {
@@ -2596,6 +2624,7 @@ struct QuestRowView: View {
 }
 
 struct DailyCompletionBonusView: View {
+    let questCount: Int
     let allClaimed: Bool
     let bonusClaimed: Bool
     let onClaim: () -> Void
@@ -2609,7 +2638,7 @@ struct DailyCompletionBonusView: View {
                     Text("Daily Champion")
                         .font(.system(size: 15, design: .monospaced))
                         .foregroundStyle(bonusClaimed ? Color.white.opacity(0.35) : .white)
-                    Text("Complete all \(12) daily quests")
+                    Text("Complete all \(questCount) daily quests")
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(Color.white.opacity(0.55))
                 }

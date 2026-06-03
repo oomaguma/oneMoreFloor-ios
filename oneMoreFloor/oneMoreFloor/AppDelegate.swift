@@ -16,6 +16,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         Analytics.setup()
         Analytics.appLaunched()
         NotificationManager.shared.requestPermission()
+        GameCenterManager.shared.authenticate()
         return true
     }
 
