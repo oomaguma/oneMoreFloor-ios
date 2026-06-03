@@ -1,0 +1,89 @@
+//
+//  PostHogIntegration.swift
+//  PostHog
+//
+//  Created by Ioannis Josephides on 25/02/2025.
+//
+import Foundation
+
+enum PostHogIntegrationInstallSkipReason: String, CustomStringConvertible {
+    var description: String { rawValue }
+
+    case alreadyInstalled = "Already installed to another PostHogSDK instance"
+    case disabledByRemoteConfig = "Disabled in remote config"
+    case notAvailableOnPlatform = "Not available on this platform"
+}
+
+enum PostHogIntegrationInstallResult: Equatable {
+    case installed
+    case skipped(PostHogIntegrationInstallSkipReason)
+}
+
+protocol PostHogIntegration {
+    /**
+     * Indicates whether this integration requires method swizzling to function.
+     *
+     * When `enableSwizzling` is set to `false` in PostHogConfig, integrations
+     * that return `true` for this property will be skipped during installation.
+     */
+    var requiresSwizzling: Bool { get }
+
+    /**
+     * Installs and initializes the integration with a PostHogSDK instance.
+     *
+     * This method should:
+     * 1. Run checks if needed to ensure that the integration is only installed once
+     * 2. Initialize any required resources
+     * 3. Start the integration's functionality
+     *
+     * - Parameter postHog: The PostHogSDK instance to integrate with
+     * - Returns: `.installed` when installation succeeds, `.skipped(reason:)` when it doesn't
+     */
+    func install(_ postHog: PostHogSDK) -> PostHogIntegrationInstallResult
+
+    /**
+     * Uninstalls the integration from a specific PostHogSDK instance.
+     *
+     * This method should:
+     * 1. Stop all integration functionality
+     * 2. Clean up any resources
+     * 3. Remove references to the PostHog instance
+     *
+     * - Parameter postHog: The PostHog SDK instance to uninstall from
+     */
+    func uninstall(_ postHog: PostHogSDK)
+
+    /**
+     * Starts the integration's functionality.
+     *
+     * Note: This is typically called automatically during installation
+     * but may be called manually to restart a stopped integration.
+     */
+    func start()
+
+    /**
+     * Stops the integration's functionality without uninstalling.
+     *
+     * Note: This is typically called automatically during uninstallation
+     * but may be called manually to temporarily suspend the integration
+     * while maintaining its installation status (e.g manual start/stop for session recording)
+     */
+    func stop()
+
+    /**
+     * Called when the event context changes (e.g., after identify, reset, group, register).
+     *
+     * Integrations can use this to react to context changes. For example, the crash reporting
+     * integration persists this context to disk for crash-time capture.
+     *
+     * - Parameter context: The current event context dictionary containing static context,
+     *   dynamic context, identity info (distinct_id, groups), session_id, and registered properties.
+     */
+    func contextDidChange(_ context: [String: Any])
+}
+
+extension PostHogIntegration {
+    func contextDidChange(_: [String: Any]) {
+        // Default empty implementation since most integrations won't need this
+    }
+}

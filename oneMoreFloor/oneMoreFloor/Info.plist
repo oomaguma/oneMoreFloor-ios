@@ -23,12 +23,6 @@
 			</array>
 		</dict>
 	</dict>
-	<key>NSUserTrackingUsageDescription</key>
-	<string>Used to show you relevant ads and measure their effectiveness.</string>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
-	<key>CFBundleDisplayName</key>
-	<string>One More Floor</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

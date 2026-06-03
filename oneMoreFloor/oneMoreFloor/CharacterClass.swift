@@ -69,12 +69,46 @@ struct EnemyType: Identifiable {
     func atk(floor: Int) -> Int { max(1, atkBase + floor * atkPerFloor) }
 }
 
+// MARK: - Legacy Bonus
+
+struct LegacyBonus {
+    let hp: Int
+    let atk: Int
+    let def: Int
+    let regen: Int
+    let critChance: Double
+
+    var description: String {
+        var parts: [String] = []
+        if atk > 0        { parts.append("+\(atk) ATK") }
+        if def > 0        { parts.append("+\(def) DEF") }
+        if hp > 0         { parts.append("+\(hp) MaxHP") }
+        if regen > 0      { parts.append("+\(regen) Regen/s") }
+        if critChance > 0 { parts.append("+\(Int(critChance * 100))% Crit") }
+        return parts.isEmpty ? "—" : parts.joined(separator: ", ")
+    }
+}
+
 // MARK: - Characters
 
 extension CharacterClass {
     static let all: [CharacterClass] = [
         soldier, knight, knightTemplar, swordsman, lancer, archer, wizard, priest
     ]
+
+    var legacyBonus: LegacyBonus {
+        switch id {
+        case "soldier":       return LegacyBonus(hp: 0,  atk: 0, def: 0, regen: 0, critChance: 0.02)
+        case "knight":        return LegacyBonus(hp: 0,  atk: 0, def: 1, regen: 0, critChance: 0.00)
+        case "knightTemplar": return LegacyBonus(hp: 0,  atk: 0, def: 0, regen: 1, critChance: 0.00)
+        case "swordsman":     return LegacyBonus(hp: 0,  atk: 1, def: 0, regen: 0, critChance: 0.00)
+        case "lancer":        return LegacyBonus(hp: 0,  atk: 1, def: 0, regen: 0, critChance: 0.00)
+        case "archer":        return LegacyBonus(hp: 0,  atk: 0, def: 0, regen: 0, critChance: 0.03)
+        case "wizard":        return LegacyBonus(hp: 0,  atk: 2, def: 0, regen: 0, critChance: 0.00)
+        case "priest":        return LegacyBonus(hp: 20, atk: 0, def: 0, regen: 0, critChance: 0.00)
+        default:              return LegacyBonus(hp: 0,  atk: 0, def: 0, regen: 0, critChance: 0.00)
+        }
+    }
 
     static let soldier = CharacterClass(
         id: "soldier", name: "Soldier", role: "Warrior",

@@ -1,0 +1,77 @@
+//
+//  AppDelegate.swift
+//  PostHogExample
+//
+//  Created by Ben White on 10.01.23.
+//
+
+import Foundation
+import PostHog
+import UIKit
+
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(_: UIApplication, didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        let config = PostHogConfig(
+            projectToken: "phc_WKfvDfedaJEDCoUmt9pVa3OWtbbUP1W2ctxwXkt3A3n"
+        )
+        // the ScreenViews for SwiftUI does not work, the names are not useful
+        config.captureScreenViews = false
+        config.captureApplicationLifecycleEvents = false
+//        config.flushAt = 1
+//        config.flushIntervalSeconds = 30
+        config.debug = true
+        config.flushAt = 1
+        config.sendFeatureFlagEvent = false
+
+        #if os(iOS) || os(macOS) || os(tvOS)
+            config.errorTrackingConfig.autoCapture = false
+        #endif
+
+        #if os(iOS)
+            if #available(iOS 15.0, *) {
+                config.surveys = true
+                // Uncomment to force-render any matching survey in a specific language regardless of device locale.
+                // config.surveysConfig.overrideDisplayLanguage = "fr"
+            }
+            config.sessionReplay = false
+            config.sessionReplayConfig.screenshotMode = true
+            config.sessionReplayConfig.maskAllTextInputs = true
+            config.sessionReplayConfig.maskAllImages = true
+            config.sessionReplayConfig.captureLogs = true
+            config.sessionReplayConfig.captureLogsConfig.minLogLevel = .info
+            config.sessionReplayConfig.captureLogsConfig.logSanitizer = { log in
+                // Skip some logs
+                guard !log.contains("[SKIP]") else { return nil }
+                // all logs are lowercased and info level
+                return PostHogLogEntry(level: .info, message: log.lowercased())
+            }
+        #endif
+
+        PostHogSDK.shared.setup(config)
+//        PostHogSDK.shared.debug()
+//        PostHogSDK.shared.capture("App started!")
+//        PostHogSDK.shared.reset()
+
+//        PostHogSDK.shared.identify("Manoel")
+
+        let defaultCenter = NotificationCenter.default
+
+        #if os(iOS) || os(tvOS) || os(visionOS)
+            defaultCenter.addObserver(self,
+                                      selector: #selector(receiveFeatureFlags),
+                                      name: PostHogSDK.didReceiveFeatureFlags,
+                                      object: nil)
+        #endif
+
+        return true
+    }
+
+    @objc func receiveFeatureFlags() {
+        print("user receiveFeatureFlags callback")
+        #if DEBUG
+            let testFlag = PostHogSDK.shared.getFeatureFlag("bool-value")
+            print("Feature flag 'bool-value': \(String(describing: testFlag))")
+        #endif
+        print("[SKIP] user receiveFeatureFlags callback")
+    }
+}

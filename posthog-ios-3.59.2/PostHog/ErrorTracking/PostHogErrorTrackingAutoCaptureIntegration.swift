@@ -1,0 +1,201 @@
+//
+//  PostHogErrorTrackingAutoCaptureIntegration.swift
+//  PostHog
+//
+//  Created by Ioannis Josephides on 14/12/2025.
+//
+
+import Foundation
+
+#if os(iOS) || os(macOS) || os(tvOS)
+    // Vendored crash reporting is an implementation detail.
+    @_implementationOnly import PHPLCrashReporter
+
+    class PostHogErrorTrackingAutoCaptureIntegration: PostHogIntegration {
+        private static let integrationInstalledLock = NSLock()
+        private static var integrationInstalled = false
+
+        var requiresSwizzling: Bool { false }
+
+        private weak var postHog: PostHogSDK?
+        private var crashReporter: PHPLCrashReporter?
+
+        func install(_ postHog: PostHogSDK) -> PostHogIntegrationInstallResult {
+            if postHog.remoteConfig?.isAutocaptureExceptionsEnabled() == false {
+                return .skipped(.disabledByRemoteConfig)
+            }
+
+            let installed = PostHogErrorTrackingAutoCaptureIntegration.integrationInstalledLock.withLock {
+                if PostHogErrorTrackingAutoCaptureIntegration.integrationInstalled {
+                    return false
+                }
+                PostHogErrorTrackingAutoCaptureIntegration.integrationInstalled = true
+                return true
+            }
+
+            guard installed else {
+                return .skipped(.alreadyInstalled)
+            }
+
+            if let crashReporter = setupCrashReporter() {
+                self.crashReporter = crashReporter
+                self.postHog = postHog
+                // Note: Order here matters, we need to process any pending crash report before enabling the crash reporter
+                processPendingCrashReportIfNeeded(reporter: crashReporter)
+                enableCrashReporter(reporter: crashReporter)
+            }
+
+            return .installed
+        }
+
+        func uninstall(_ postHog: PostHogSDK) {
+            if self.postHog === postHog || self.postHog == nil {
+                stop()
+                crashReporter = nil
+                self.postHog = nil
+                PostHogErrorTrackingAutoCaptureIntegration.integrationInstalledLock.withLock {
+                    PostHogErrorTrackingAutoCaptureIntegration.integrationInstalled = false
+                }
+            }
+        }
+
+        func start() {
+            // No-op for crash reporting. Always active once installed
+        }
+
+        func stop() {
+            // No-op for crash reporting. Always active once installed
+        }
+
+        func contextDidChange(_ context: [String: Any]) {
+            guard let crashReporter else { return }
+
+            // Serialize context to JSON and set as customData
+            do {
+                let jsonData = try JSONSerialization.data(withJSONObject: context, options: [])
+                crashReporter.customData = jsonData
+            } catch {
+                hedgeLog("Failed to serialize crash context: \(error)")
+            }
+        }
+
+        // MARK: - Private Methods
+
+        private func setupCrashReporter() -> PHPLCrashReporter? {
+            // Configure PHPLCrashReporter
+            // Note: Mach exception handling is not available on tvOS, so we fall back to BSD signal handlers
+            #if os(tvOS)
+                let signalHandlerType: PHPLCrashReporterSignalHandlerType = .BSD
+            #else
+                let signalHandlerType: PHPLCrashReporterSignalHandlerType = .mach
+            #endif
+
+            let config = PHPLCrashReporterConfig(
+                signalHandlerType: signalHandlerType,
+                symbolicationStrategy: [], // No local symbolication, we'll be doing server-side
+                shouldRegisterUncaughtExceptionHandler: true
+            )
+
+            guard let reporter = PHPLCrashReporter(configuration: config) else {
+                hedgeLog("Failed to create PHPLCrashReporter instance")
+                return nil
+            }
+
+            return reporter
+        }
+
+        private func processPendingCrashReportIfNeeded(reporter: PHPLCrashReporter) {
+            // Check for pending crash report FIRST (before enabling for new crashes)
+            if reporter.hasPendingCrashReport() {
+                hedgeLog("Found pending crash report, processing...")
+                processPendingCrashReport()
+            }
+        }
+
+        private func enableCrashReporter(reporter: PHPLCrashReporter) {
+            // Check for debugger first. Crash handler won't work when debugging
+            if PostHogDebugUtils.isDebuggerAttached() {
+                hedgeLog("Crash handler is disabled because a debugger is attached. Crashes will be caught by the debugger instead.")
+                return
+            }
+
+            // Enable crash reporter for this session
+            do {
+                try reporter.enableAndReturnError()
+                hedgeLog("PHPLCrashReporter enabled successfully")
+            } catch {
+                hedgeLog("Failed to enable PHPLCrashReporter: \(error)")
+            }
+        }
+
+        private func processPendingCrashReport() {
+            guard let crashReporter, let postHog else {
+                return
+            }
+
+            // Load and purge BEFORE processing to prevent crash loops.
+            // If processing itself crashes (e.g., corrupt report), the report is already
+            // gone so the app won't crash again on next launch.
+            let crashData: Data
+            do {
+                crashData = try crashReporter.loadPendingCrashReportDataAndReturnError()
+            } catch {
+                hedgeLog("Failed to load crash report: \(error)")
+                crashReporter.purgePendingCrashReport()
+                return
+            }
+
+            crashReporter.purgePendingCrashReport()
+
+            do {
+                let crashReport = try PHPLCrashReport(data: crashData)
+
+                // Extract saved context from crash report's customData
+                var savedContext: [String: Any] = [:]
+                if let customData = crashReport.customData {
+                    savedContext = fromJSONData(customData) ?? [:]
+                }
+
+                // Extract identity and event properties from saved context
+                let crashDistinctId = savedContext["distinct_id"] as? String
+                let crashEventProperties = savedContext["event_properties"] as? [String: Any] ?? [:]
+
+                // Collect crash-specific event properties (stack traces, exceptions etc)
+                let exceptionProperties = PostHogCrashReportProcessor.processReport(crashReport, config: postHog.config.errorTrackingConfig)
+
+                // Merge: crash-time event properties as base, exception properties on top
+                let finalProperties = crashEventProperties.merging(exceptionProperties) { _, new in new }
+
+                // Collect crash timestamp
+                let crashTimestamp = PostHogCrashReportProcessor.getCrashTimestamp(crashReport)
+
+                // Capture using internal method and bypass buildProperties
+                postHog.captureInternal(
+                    "$exception",
+                    distinctId: crashDistinctId,
+                    properties: finalProperties,
+                    timestamp: crashTimestamp,
+                    skipBuildProperties: true
+                )
+
+                hedgeLog("Crash report processed and captured")
+            } catch {
+                hedgeLog("Failed to process crash report: \(error)")
+            }
+        }
+    }
+
+#else
+    // watchOS stub - crash reporting is not available
+    class PostHogErrorTrackingAutoCaptureIntegration: PostHogIntegration {
+        var requiresSwizzling: Bool { false }
+
+        func install(_: PostHogSDK) -> PostHogIntegrationInstallResult {
+            .skipped(.notAvailableOnPlatform)
+        }
+
+        func uninstall(_: PostHogSDK) { /* no-op */ }
+        func start() { /* no-op */ }
+        func stop() { /* no-op */ }
+    }
+#endif

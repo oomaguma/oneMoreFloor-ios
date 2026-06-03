@@ -39,17 +39,14 @@ final class StoreManager {
     }
 
     private func verifyEntitlements() async {
-        var removeAds = false, nightWatch = false
         for await result in Transaction.currentEntitlements {
             guard case .verified(let tx) = result else { continue }
             switch tx.productID {
-            case Self.removeAdsID:  removeAds  = true
-            case Self.nightWatchID: nightWatch = true
+            case Self.removeAdsID:  persistRemoveAds(true)
+            case Self.nightWatchID: persistNightWatch(true)
             default: break
             }
         }
-        persistRemoveAds(removeAds)
-        persistNightWatch(nightWatch)
     }
 
     private func listenForTransactions() -> Task<Void, Never> {
@@ -70,6 +67,7 @@ final class StoreManager {
         let result = try await product.purchase()
         guard case .success(let verification) = result,
               case .verified(let tx) = verification else { return }
+        Analytics.iapPurchased(productID: tx.productID)
         switch tx.productID {
         case Self.removeAdsID:  persistRemoveAds(true)
         case Self.nightWatchID: persistNightWatch(true)

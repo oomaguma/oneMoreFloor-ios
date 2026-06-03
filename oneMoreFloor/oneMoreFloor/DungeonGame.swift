@@ -132,6 +132,25 @@ class DungeonGame {
         CharacterClass.all.first { $0.id == characterID } ?? .soldier
     }
 
+    private(set) var retiredCharacterIDs: [String] = []
+
+    var legacyHpBonus: Int {
+        retiredCharacterIDs.reduce(0) { sum, id in sum + (CharacterClass.all.first { c in c.id == id }?.legacyBonus.hp ?? 0) }
+    }
+    var legacyAtkBonus: Int {
+        retiredCharacterIDs.reduce(0) { sum, id in sum + (CharacterClass.all.first { c in c.id == id }?.legacyBonus.atk ?? 0) }
+    }
+    var legacyDefBonus: Int {
+        retiredCharacterIDs.reduce(0) { sum, id in sum + (CharacterClass.all.first { c in c.id == id }?.legacyBonus.def ?? 0) }
+    }
+    var legacyRegenBonus: Int {
+        retiredCharacterIDs.reduce(0) { sum, id in sum + (CharacterClass.all.first { c in c.id == id }?.legacyBonus.regen ?? 0) }
+    }
+    var legacyCritBonus: Double {
+        retiredCharacterIDs.reduce(0.0) { sum, id in sum + (CharacterClass.all.first { c in c.id == id }?.legacyBonus.critChance ?? 0.0) }
+    }
+    var heroCritChance: Double { character.critChance + legacyCritBonus }
+
     var currentEnemyType: EnemyType?
 
     private var monsterHp: Int = 0
@@ -337,6 +356,7 @@ class DungeonGame {
             }
             isGameOver = true
             inCombat   = false
+            Analytics.heroDied(floor: currentFloor, deepestEver: deepestFloorEver)
             log("Hero has fallen. Tap Restart to try again.")
             onHeroDeath?()
             return
@@ -405,7 +425,7 @@ class DungeonGame {
     private func doCombatTick() {
         onHeroAttack?()
 
-        let isCrit  = Double.random(in: 0...1) < character.critChance
+        let isCrit  = Double.random(in: 0...1) < heroCritChance
         let heroDmg = max(1, isCrit ? heroAtk * 2 : heroAtk)
         monsterHp -= heroDmg
 
@@ -440,6 +460,7 @@ class DungeonGame {
             if let zone = DungeonGame.zones.first(where: { $0.minFloor == currentFloor }),
                zone.minFloor > 1, currentFloor > prevDeepest {
                 pendingZoneUnlock = zone
+                Analytics.zoneUnlocked(zoneID: zone.id, zoneName: zone.name)
             }
 
             if isCrit { onHeroCrit?(heroDmg) } else { onMonsterDamageTaken?(heroDmg) }
@@ -466,6 +487,7 @@ class DungeonGame {
                     bossName:   monsterName,
                     goldEarned: earned
                 )
+                Analytics.bossDefeated(floor: killedOnFloor, zone: killedZone.name, bossName: monsterName)
                 log(isCrit
                     ? "⚡ CRITICAL BLOW! BOSS DEFEATED! +\(earned)g  |  Stage -> \(DungeonGame.stageLabel(floor: currentFloor))"
                     : "⚔ BOSS DEFEATED! +\(earned)g  |  Stage -> \(DungeonGame.stageLabel(floor: currentFloor))")
@@ -511,6 +533,7 @@ class DungeonGame {
         gold -= cost
         upgrades[i].level += 1
         let lvl = upgrades[i].level
+        Analytics.upgradePurchased(id: id, name: upgrades[i].name, newLevel: lvl)
 
         switch id {
         case "atk":
@@ -545,6 +568,7 @@ class DungeonGame {
         soulShards -= prestigeUpgrades[i].shardCost
         prestigeUpgrades[i].level += 1
         let u = prestigeUpgrades[i]
+        Analytics.prestigeUpgradePurchased(id: u.id, name: u.name, newLevel: u.level)
         log("Unlocked: \(u.name) Lv\(u.level) — \(u.currentEffect)")
         return true
     }
@@ -552,12 +576,25 @@ class DungeonGame {
     func prestigeShardValue() -> Int { max(0, deepestFloor - (prestigeThreshold - 1)) }
     func canPrestige() -> Bool       { prestigeShardValue() > 0 }
 
-    func prestige() {
+    func prestige(switchingTo newCharacter: CharacterClass? = nil) {
         guard canPrestige() else { return }
+
+        // Handle dynasty retirement: earn each character's legacy bonus once
+        if let newChar = newCharacter {
+            if !retiredCharacterIDs.contains(characterID) {
+                retiredCharacterIDs.append(characterID)
+            }
+            characterID = newChar.id
+        }
+
         let earned = prestigeShardValue()
         soulShards += earned
+        Analytics.prestigeCompleted(shardsEarned: earned, totalShards: soulShards, deepestFloor: deepestFloor)
 
         log("=== PRESTIGE ===")
+        if let newChar = newCharacter {
+            log("Hero retired. New champion: \(newChar.name)")
+        }
         log("Earned \(earned) Soul Shard\(earned == 1 ? "" : "s"). Total: \(soulShards)")
         log("Resetting run...")
 
@@ -567,6 +604,7 @@ class DungeonGame {
         currentFightFloor  = 0
         deepestFloor       = 0
         inCombat           = false
+        isGameOver         = false
         pendingBossVictory = nil
         pendingZoneUnlock  = nil
         ticksUntilFight    = 3
@@ -577,10 +615,10 @@ class DungeonGame {
         let veteranLevel      = prestigeUpgrades.first(where: { $0.id == "veteran" })?.level      ?? 0
 
         gold      = warchestLevel * 50
-        heroMaxHp = character.baseHP  + soulShards * 5 + constitutionLevel * 20
-        heroAtk   = character.baseATK + soulShards / 2
-        heroDef   = character.baseDEF
-        heroRegen = character.baseRegen + veteranLevel
+        heroMaxHp = character.baseHP  + soulShards * 5 + constitutionLevel * 20 + legacyHpBonus
+        heroAtk   = character.baseATK + soulShards / 2 + legacyAtkBonus
+        heroDef   = character.baseDEF + legacyDefBonus
+        heroRegen = character.baseRegen + veteranLevel + legacyRegenBonus
         for item in equippedItems.values {
             heroAtk   += item.atkBonus
             heroDef   += item.defBonus
@@ -600,6 +638,7 @@ class DungeonGame {
 
         var bonusParts = ["ATK \(heroAtk)", "MaxHP \(heroMaxHp)"]
         if heroRegen > 0 { bonusParts.append("Regen \(heroRegen)/s") }
+        if !retiredCharacterIDs.isEmpty { bonusParts.append("Legacy ×\(retiredCharacterIDs.count)") }
         log("Bonuses: \(bonusParts.joined(separator: ", "))")
     }
 
@@ -886,6 +925,7 @@ class DungeonGame {
             addToInventory(item)
             log("⚔ Found \(item.rarity.label) \(item.name)! [\(item.statSummary)] — Check ITEMS tab.")
         }
+        Analytics.itemDropped(rarity: item.rarity.rawValue, slot: item.slot.rawValue)
         pendingDrop = item
     }
 
@@ -1057,6 +1097,7 @@ class DungeonGame {
               dailyQuests[i].isComplete, !dailyQuests[i].claimed else { return }
         dailyQuests[i].claimed = true
         gold += dailyQuests[i].rewardGold
+        Analytics.questClaimed(title: dailyQuests[i].title, rewardGold: dailyQuests[i].rewardGold)
         log("Quest: \(dailyQuests[i].title) — +\(dailyQuests[i].rewardGold)g!")
     }
 
@@ -1098,6 +1139,8 @@ class DungeonGame {
         var dailyCompletionBonusClaimed: Bool?
         // v6 additions (optional for backwards compatibility)
         var usableItems: [UsableItem]?
+        // v7 additions (optional for backwards compatibility)
+        var retiredCharacterIDs: [String]?
     }
 
     private static let saveKey = "dungeonSave_v2"
@@ -1138,7 +1181,8 @@ class DungeonGame {
             activeEffects: activeEffects,
             pendingFloorEvent: pendingFloorEvent,
             dailyCompletionBonusClaimed: dailyCompletionBonusClaimed,
-            usableItems: usableItems
+            usableItems: usableItems,
+            retiredCharacterIDs: retiredCharacterIDs
         )
         if let encoded = try? JSONEncoder().encode(data) {
             UserDefaults.standard.set(encoded, forKey: Self.saveKey)
@@ -1200,8 +1244,9 @@ class DungeonGame {
         dailyCompletionBonusClaimed  = data.dailyCompletionBonusClaimed ?? false
         checkAndRefreshDailyQuests()
 
-        activeEffects    = data.activeEffects    ?? []
-        pendingFloorEvent = data.pendingFloorEvent
+        activeEffects        = data.activeEffects        ?? []
+        pendingFloorEvent    = data.pendingFloorEvent
+        retiredCharacterIDs  = data.retiredCharacterIDs  ?? []
 
         displayMonsterHp    = inCombat ? max(0, monsterHp) : 0
         displayMonsterMaxHp = inCombat ? monsterMaxHp : 0

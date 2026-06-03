@@ -46,6 +46,7 @@ struct ContentView: View {
                     if previousCharacter != nil { DungeonGame.clearSave() }
                     selectedCharacter = newCharacter
                     previousCharacter = nil
+                    Analytics.characterSelected(characterID: newCharacter.id)
                 }
             )
         }
@@ -146,13 +147,31 @@ struct TitleScreenView: View {
 
 // MARK: - Character Select
 
+struct DynastySelectContext {
+    let retiringCharacterID: String
+    let retiredCharacterIDs: [String]
+
+    var retiringCharacterName: String {
+        CharacterClass.all.first { $0.id == retiringCharacterID }?.name ?? "Hero"
+    }
+    // nil when the legacy for this character has already been claimed
+    var pendingLegacyBonus: LegacyBonus? {
+        guard !retiredCharacterIDs.contains(retiringCharacterID) else { return nil }
+        return CharacterClass.all.first { $0.id == retiringCharacterID }?.legacyBonus
+    }
+}
+
 struct CharacterSelectView: View {
     let onCancel: (() -> Void)?
     let onSelect: (CharacterClass) -> Void
+    var dynastyContext: DynastySelectContext? = nil
 
-    init(onCancel: (() -> Void)? = nil, onSelect: @escaping (CharacterClass) -> Void) {
+    init(onCancel: (() -> Void)? = nil,
+         onSelect: @escaping (CharacterClass) -> Void,
+         dynastyContext: DynastySelectContext? = nil) {
         self.onCancel = onCancel
         self.onSelect = onSelect
+        self.dynastyContext = dynastyContext
     }
 
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
@@ -162,27 +181,50 @@ struct CharacterSelectView: View {
             Color(red: 0.07, green: 0.07, blue: 0.11).ignoresSafeArea()
 
             VStack(spacing: 0) {
-                Text("CHOOSE YOUR HERO")
+                Text(dynastyContext != nil ? "CHOOSE NEW CHAMPION" : "CHOOSE YOUR HERO")
                     .font(.system(size: 18, weight: .bold, design: .monospaced))
                     .foregroundStyle(.white)
                     .padding(.top, 52)
-                    .padding(.bottom, onCancel == nil ? 20 : 12)
+                    .padding(.bottom, 12)
 
-                // Only shown when swapping an existing hero (reached from the prestige tab),
-                // where confirming a new pick wipes the current run's progress.
-                if onCancel != nil {
+                if let ctx = dynastyContext {
+                    if let bonus = ctx.pendingLegacyBonus {
+                        HStack(spacing: 6) {
+                            Image(systemName: "crown.fill")
+                                .font(.system(size: 11))
+                            Text("Retiring \(ctx.retiringCharacterName): \(bonus.description)")
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        }
+                        .foregroundStyle(Color(red: 1.00, green: 0.80, blue: 0.25))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                    } else {
+                        Text("\(ctx.retiringCharacterName)'s legacy already claimed.")
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.45))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 16)
+                    }
+                } else if onCancel != nil {
                     Text("Warning: changing your hero resets all progress.")
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundStyle(Color(red: 1.00, green: 0.45, blue: 0.25))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
+                } else {
+                    Spacer().frame(height: 8)
                 }
 
                 ScrollView {
                     LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(CharacterClass.all) { character in
-                            CharacterCardView(character: character) {
+                            CharacterCardView(
+                                character: character,
+                                legacyBonusLabel: dynastyContext != nil ? character.legacyBonus.description : nil
+                            ) {
                                 onSelect(character)
                             }
                         }
@@ -214,11 +256,13 @@ struct CharacterSelectView: View {
 struct CharacterCardView: View {
     let character: CharacterClass
     let onTap: () -> Void
+    var legacyBonusLabel: String? = nil
 
     @State private var previewScene: IdlePreviewScene
 
-    init(character: CharacterClass, onTap: @escaping () -> Void) {
+    init(character: CharacterClass, legacyBonusLabel: String? = nil, onTap: @escaping () -> Void) {
         self.character = character
+        self.legacyBonusLabel = legacyBonusLabel
         self.onTap = onTap
         _previewScene = State(initialValue: IdlePreviewScene(idleSpec: character.idle))
     }
@@ -272,6 +316,17 @@ struct CharacterCardView: View {
                     if character.baseRegen > 0 {
                         statPill("RGN", "\(character.baseRegen)", Color(red: 0.95, green: 0.82, blue: 0.30))
                     }
+                }
+
+                if let bonus = legacyBonusLabel {
+                    HStack(spacing: 4) {
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 9))
+                        Text(bonus)
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    }
+                    .foregroundStyle(Color(red: 1.00, green: 0.75, blue: 0.15))
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding(14)
@@ -358,8 +413,18 @@ struct GameView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
-                .sheet(isPresented: $showStore) { StoreSheetView() }
-                .sheet(isPresented: $showSettings) { SettingsView() }
+                .sheet(isPresented: $showStore) {
+                    StoreSheetView()
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                        .presentationSizing(.page)
+                }
+                .sheet(isPresented: $showSettings) {
+                    SettingsView()
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                        .presentationSizing(.page)
+                }
 
                 BattleTabView(game: game, combatScene: combatScene, spriteOpacity: spriteOpacity)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -384,6 +449,7 @@ struct GameView: View {
                     adManager: adManager,
                     onRevive: {
                         game.revive()
+                        game.save()
                         combatScene.playHeroIdle()
                         combatScene.playEnemyIdle()
                     },
@@ -416,6 +482,7 @@ struct GameView: View {
             sheetContent
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+                .presentationSizing(.page)
         }
         .preferredColorScheme(.dark)
         .onAppear {
@@ -625,6 +692,7 @@ struct OfflineSummaryView: View {
                             adManager.showOfflineAd {
                                 onDoubleGold()
                                 didDoubleGold = true
+                                Analytics.offlineGoldDoubled(goldEarned: summary.goldEarned)
                             }
                         } label: {
                             HStack(spacing: 8) {
@@ -664,10 +732,18 @@ struct OfflineSummaryView: View {
             )
             .padding(.horizontal, 32)
             .onAppear {
-                if StoreManager.shared.hasPurchasedRemoveAds, summary.goldEarned > 0, !didDoubleGold {
+                let autoDoubled = StoreManager.shared.hasPurchasedRemoveAds && summary.goldEarned > 0 && !didDoubleGold
+                if autoDoubled {
                     onDoubleGold()
                     didDoubleGold = true
                 }
+                Analytics.offlineSummaryShown(
+                    goldEarned: summary.goldEarned,
+                    floorsCleared: summary.floorsCleared,
+                    deaths: summary.deaths,
+                    durationSeconds: summary.duration,
+                    goldDoubled: autoDoubled
+                )
             }
         }
     }
@@ -783,10 +859,10 @@ struct StatusBarView: View {
     private func statCell(_ label: String, _ value: String, warning: Bool = false) -> some View {
         VStack(spacing: 3) {
             Text(label)
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
                 .foregroundStyle(Color.white.opacity(0.75))
             Text(value)
-                .font(.system(size: 15, weight: .medium, design: .monospaced))
+                .font(.system(size: 16, weight: .medium, design: .monospaced))
                 .foregroundStyle(warning ? .red : .white)
                 .monospacedDigit()
         }
@@ -809,28 +885,28 @@ struct CombatStatusView: View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(game.character.name.uppercased())
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.75))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.80))
                 HealthBar(pct: heroPct, color: heroColor)
                 Text("\(game.heroHp) / \(game.heroMaxHp)")
-                    .font(.system(size: 12, design: .monospaced).weight(.medium))
-                    .foregroundStyle(Color.white.opacity(0.75))
+                    .font(.system(size: 13, design: .monospaced).weight(.medium))
+                    .foregroundStyle(Color.white.opacity(0.80))
                     .monospacedDigit()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(alignment: .trailing, spacing: 5) {
                 Text(game.displayMonsterName.isEmpty ? "NO ENEMY" : game.displayMonsterName.uppercased())
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundStyle(game.displayIsBoss
                         ? Color(red: 1.0, green: 0.55, blue: 0.10)
-                        : Color.white.opacity(0.75))
+                        : Color.white.opacity(0.80))
                 HealthBar(pct: monsterPct, color: Color(red: 0.85, green: 0.22, blue: 0.22))
                 Text(game.displayMonsterMaxHp > 0
                      ? "\(game.displayMonsterHp) / \(game.displayMonsterMaxHp)"
                      : "—")
-                    .font(.system(size: 12, design: .monospaced).weight(.medium))
-                    .foregroundStyle(Color.white.opacity(0.75))
+                    .font(.system(size: 13, design: .monospaced).weight(.medium))
+                    .foregroundStyle(Color.white.opacity(0.80))
                     .monospacedDigit()
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
@@ -896,34 +972,38 @@ struct MapView: View {
             }
             .padding(.horizontal, 20)
 
-            ScrollViewReader { proxy in
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 0) {
-                        ForEach(Array(DungeonGame.zones.enumerated()), id: \.element.id) { idx, zone in
-                            ZoneNodeView(
-                                zone: zone,
-                                isCurrent: game.currentZone.id == zone.id,
-                                isPast: zone.maxFloor != nil && game.currentFloor > zone.maxFloor!,
-                                everReached: game.deepestFloorEver >= zone.minFloor
-                            )
-                            .id(zone.id)
-                            if idx < DungeonGame.zones.count - 1 {
-                                Rectangle()
-                                    .fill(zone.maxFloor != nil && game.currentFloor > zone.maxFloor!
-                                          ? Color(white: 0.38) : Color(white: 0.18))
-                                    .frame(width: 16, height: 2)
+            GeometryReader { geo in
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 0) {
+                            ForEach(Array(DungeonGame.zones.enumerated()), id: \.element.id) { idx, zone in
+                                ZoneNodeView(
+                                    zone: zone,
+                                    isCurrent: game.currentZone.id == zone.id,
+                                    isPast: zone.maxFloor != nil && game.currentFloor > zone.maxFloor!,
+                                    everReached: game.deepestFloorEver >= zone.minFloor
+                                )
+                                .id(zone.id)
+                                if idx < DungeonGame.zones.count - 1 {
+                                    Rectangle()
+                                        .fill(zone.maxFloor != nil && game.currentFloor > zone.maxFloor!
+                                              ? Color(white: 0.38) : Color(white: 0.18))
+                                        .frame(width: 16, height: 2)
+                                }
                             }
                         }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 4)
+                        .frame(minWidth: geo.size.width, alignment: .center)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 4)
-                }
-                .onChange(of: game.currentZone.id) { _, id in
-                    withAnimation(.easeInOut(duration: 0.5)) {
-                        proxy.scrollTo(id, anchor: .center)
+                    .onChange(of: game.currentZone.id) { _, id in
+                        withAnimation(.easeInOut(duration: 0.5)) {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
                     }
                 }
             }
+            .frame(height: 88)
         }
         .padding(.vertical, 10)
     }
@@ -995,23 +1075,27 @@ struct BattleTabView: View {
     let combatScene: CombatScene
     let spriteOpacity: Double
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     var body: some View {
-        VStack(spacing: 0) {
-            SpriteView(scene: combatScene, options: [.allowsTransparency])
-                .frame(height: 260)
-                .frame(maxWidth: .infinity)
-                .opacity(spriteOpacity)
-            CombatStatusView(game: game)
-            MapView(game: game)
-            ActiveEffectsBarView(game: game)
-            ConsumablesBarView(game: game)
-            if let event = game.pendingFloorEvent {
-                FloorEventCardView(game: game, event: event)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+        ScrollView {
+            VStack(spacing: 0) {
+                SpriteView(scene: combatScene, options: [.allowsTransparency])
+                    .frame(height: horizontalSizeClass == .regular ? 380 : 260)
+                    .frame(maxWidth: 560)
+                    .frame(maxWidth: .infinity)
+                    .opacity(spriteOpacity)
+                CombatStatusView(game: game)
+                MapView(game: game)
+                ActiveEffectsBarView(game: game)
+                ConsumablesBarView(game: game)
+                if let event = game.pendingFloorEvent {
+                    FloorEventCardView(game: game, event: event)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
-            Spacer()
+            .animation(.spring(response: 0.5, dampingFraction: 0.8), value: game.pendingFloorEvent?.id)
         }
-        .animation(.spring(response: 0.5, dampingFraction: 0.8), value: game.pendingFloorEvent?.id)
         .background(Color(red: 0.07, green: 0.07, blue: 0.11))
     }
 }
@@ -1091,11 +1175,11 @@ struct ConsumablesBarView: View {
                                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                                 .foregroundStyle(.white)
                             Text("USE")
-                                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
                                 .foregroundStyle(Color(red: 0.4, green: 0.95, blue: 0.55))
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 12)
                                 .fill(Color(red: 0.05, green: 0.18, blue: 0.08))
@@ -1192,7 +1276,7 @@ struct FloorEventCardView: View {
                     .font(.system(size: 32))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(categoryLabel(t.category))
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundStyle(categoryColor(t.category))
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -1256,7 +1340,7 @@ struct FloorEventCardView: View {
                     .multilineTextAlignment(.center)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 10)
                     .fill(active ? accent.opacity(0.12) : Color.white.opacity(0.04))
@@ -1356,7 +1440,7 @@ private struct CustomGameTabBar: View {
                 }
 
                 Text(def.label)
-                    .font(.system(size: 8, weight: isSelected ? .bold : .regular, design: .monospaced))
+                    .font(.system(size: 10, weight: isSelected ? .bold : .regular, design: .monospaced))
                     .foregroundStyle(isSelected ? selectedColor : unselectedColor)
             }
             .frame(maxWidth: .infinity)
@@ -1412,11 +1496,12 @@ struct PrestigeTabView: View {
     let game: DungeonGame
     let onChangeCharacter: () -> Void
     @State private var showStore = false
+    @State private var showDynastySelect = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 10) {
-                PrestigeRowView(game: game)
+                PrestigeRowView(game: game, onRetireHero: { showDynastySelect = true })
 
                 Text("PERMANENT UPGRADES")
                     .font(.system(size: 10, weight: .semibold, design: .monospaced))
@@ -1433,6 +1518,10 @@ struct PrestigeTabView: View {
                         game.buyPrestigeUpgrade(id: upgrade.id)
                         SoundManager.shared.play("8_bit_chime_positive")
                     }
+                }
+
+                if !game.retiredCharacterIDs.isEmpty {
+                    LegacyBonusSectionView(retiredIDs: game.retiredCharacterIDs)
                 }
 
                 Button(action: onChangeCharacter) {
@@ -1483,7 +1572,83 @@ struct PrestigeTabView: View {
             .padding(.bottom, 32)
         }
         .background(Color(red: 0.07, green: 0.07, blue: 0.11))
-        .sheet(isPresented: $showStore) { StoreSheetView() }
+        .sheet(isPresented: $showStore) {
+            StoreSheetView()
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationSizing(.page)
+        }
+        .sheet(isPresented: $showDynastySelect) {
+            CharacterSelectView(
+                onCancel: { showDynastySelect = false },
+                onSelect: { newChar in
+                    game.prestige(switchingTo: newChar)
+                    showDynastySelect = false
+                },
+                dynastyContext: DynastySelectContext(
+                    retiringCharacterID: game.characterID,
+                    retiredCharacterIDs: game.retiredCharacterIDs
+                )
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationSizing(.page)
+        }
+    }
+}
+
+// MARK: - Legacy Bonus Section
+
+struct LegacyBonusSectionView: View {
+    let retiredIDs: [String]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("LEGACY BONUSES")
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.75))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+                .padding(.top, 8)
+
+            VStack(spacing: 0) {
+                ForEach(Array(retiredIDs.enumerated()), id: \.element) { i, id in
+                    if let char = CharacterClass.all.first(where: { $0.id == id }) {
+                        VStack(spacing: 0) {
+                            if i > 0 {
+                                Divider()
+                                    .background(Color.white.opacity(0.08))
+                                    .padding(.horizontal, 16)
+                            }
+                            HStack {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "crown.fill")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Color(red: 1.00, green: 0.75, blue: 0.15))
+                                    Text(char.name)
+                                        .font(.system(size: 13, design: .monospaced))
+                                        .foregroundStyle(.white)
+                                }
+                                Spacer()
+                                Text(char.legacyBonus.description)
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundStyle(Color(red: 1.00, green: 0.75, blue: 0.15))
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                        }
+                    }
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(white: 0.10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color(red: 1.00, green: 0.75, blue: 0.15).opacity(0.22), lineWidth: 1)
+                    )
+            )
+        }
     }
 }
 
@@ -1615,27 +1780,46 @@ struct PrestigeUpgradeRowView: View {
 
 struct PrestigeRowView: View {
     let game: DungeonGame
+    let onRetireHero: () -> Void
+
+    @State private var showRetireConfirm = false
 
     var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Prestige")
-                    .font(.system(size: 16, design: .monospaced))
-                    .foregroundStyle(game.canPrestige() ? Color(red: 0.72, green: 0.52, blue: 1.00) : .white)
-                Text(subtitle)
-                    .font(.system(size: 13, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.75))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Prestige")
+                        .font(.system(size: 16, design: .monospaced))
+                        .foregroundStyle(game.canPrestige() ? Color(red: 0.72, green: 0.52, blue: 1.00) : .white)
+                    Text(subtitle)
+                        .font(.system(size: 13, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.75))
+                }
+                Spacer()
             }
-            Spacer()
+
             if game.canPrestige() {
                 Button {
                     game.prestige()
                 } label: {
-                    Text("+\(game.prestigeShardValue()) shards")
+                    Text("+\(game.prestigeShardValue()) ◈")
                         .font(.system(size: 14, design: .monospaced).weight(.semibold))
                 }
                 .buttonStyle(.bordered)
                 .tint(Color(red: 0.55, green: 0.35, blue: 0.85))
+
+                Button {
+                    showRetireConfirm = true
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 11))
+                        Text("Retire Hero")
+                            .font(.system(size: 13, design: .monospaced).weight(.semibold))
+                    }
+                }
+                .buttonStyle(.bordered)
+                .tint(Color(red: 0.85, green: 0.62, blue: 0.15))
             }
         }
         .padding(.horizontal, 16)
@@ -1653,6 +1837,12 @@ struct PrestigeRowView: View {
                         )
                 )
         )
+        .alert("Retire \(game.character.name)?", isPresented: $showRetireConfirm) {
+            Button("Retire", role: .destructive) { onRetireHero() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Pass on your hero's legacy and choose a new champion.")
+        }
     }
 
     private var subtitle: String {
@@ -1713,8 +1903,8 @@ struct ItemsTabView: View {
             VStack(spacing: 14) {
                 HStack {
                     Text("EQUIPPED GEAR")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.50))
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.65))
                     Spacer()
                     if !game.inventory.isEmpty {
                         Button(action: { game.optimizeEquipment() }) {
@@ -1762,8 +1952,8 @@ struct ItemsTabView: View {
                     let charms = game.usableItems.filter { $0.kind == .revive }
                     if !charms.isEmpty {
                         Text("CONSUMABLES  \(game.usableItems.count)/\(DungeonGame.usableItemLimit)")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(Color.white.opacity(0.50))
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.65))
                             .padding(.horizontal, 4)
 
                         ForEach(charms) { item in
@@ -1779,8 +1969,8 @@ struct ItemsTabView: View {
 
                     if !game.inventory.isEmpty {
                         Text("INVENTORY  \(game.inventory.count)/\(EquipmentDrop.inventoryLimit)")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(Color.white.opacity(0.50))
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.65))
                             .padding(.horizontal, 4)
 
                         ForEach(game.inventory.reversed()) { item in
@@ -1986,7 +2176,7 @@ struct InventoryItemView: View {
                         .font(.system(size: 13, weight: .semibold, design: .monospaced))
                         .foregroundStyle(.white)
                     Text(item.rarity.label)
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
                         .foregroundStyle(item.rarity.uiColor)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 2)
@@ -1997,8 +2187,8 @@ struct InventoryItemView: View {
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Color.white.opacity(0.75))
                 Text("\(DungeonGame.stageLabel(floor: item.floorFound))  •  \(item.slot.label)")
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.30))
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.50))
             }
 
             Spacer()
@@ -2006,9 +2196,9 @@ struct InventoryItemView: View {
             VStack(spacing: 5) {
                 Button(action: onEquip) {
                     Text("EQUIP")
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                         .background(Color(red: 0.15, green: 0.38, blue: 0.72))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                         .foregroundStyle(.white)
@@ -2017,9 +2207,9 @@ struct InventoryItemView: View {
 
                 Button(action: onSell) {
                     Text("SELL \(item.sellValue)g")
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
                         .background(Color(red: 0.35, green: 0.25, blue: 0.05))
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                         .foregroundStyle(.yellow)
@@ -2283,12 +2473,12 @@ struct QuestsTabView: View {
             VStack(spacing: 10) {
                 HStack {
                     Text("DAILY QUESTS")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.50))
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.65))
                     Spacer()
                     Text("Resets at midnight")
-                        .font(.system(size: 9, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.28))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.45))
                 }
                 .padding(.horizontal, 4)
 
@@ -2362,8 +2552,8 @@ struct QuestRowView: View {
                                 .font(.system(size: 12, weight: .medium, design: .monospaced).monospacedDigit())
                                 .foregroundStyle(Color.white.opacity(0.55))
                             Text("+\(quest.rewardGold)g")
-                                .font(.system(size: 10, design: .monospaced))
-                                .foregroundStyle(Color.yellow.opacity(0.50))
+                                .font(.system(size: 12, design: .monospaced))
+                                .foregroundStyle(Color.yellow.opacity(0.65))
                         }
                     }
                 }
