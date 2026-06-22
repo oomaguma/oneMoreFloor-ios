@@ -98,6 +98,10 @@ The smallest change that fixes the dead first session. Ship it, watch D1/D7 move
 
 **QoL (2026-06-22):** the Upgrades sheet shows spendable gold up top (the sheet hides the status bar), and drops auto-equip when they out-score the worn piece, gated by a Settings toggle (default on; scores by raw stats, so it can break a matched set — hence the toggle).
 
+**Prestige rework (2026-06-22):** the original 9 prestige upgrades were all old-idle stats; none touched the new mechanics. Added three that do, appended to the array so existing saves keep their by-index levels: **Soul Anchor** (keep 15%/level of the at-risk pot when you fall, applied in `restart()`), **Avarice** (+1/level greed cap via `effectiveGreedCap`), **Adrenaline** (−10%/level ability cooldowns via `abilityCooldownScale`). Also reframed **Undying Will** (auto-restart) to offline-only and **Battle Hardened** (speed) to "auto-battle & offline speed," since neither affects manual turn-based play.
+
+**Fixes (2026-06-22):** the Auto toggle now actually drives combat — auto-battle state moved onto the `@Observable` model (`game.autoBattle`), mirrored from the toggle, because a long-lived `.task` was reading a stale `@AppStorage` snapshot. And foreground death always shows the revive/restart overlay now, even with Undying Will, so auto-restart no longer skips the Second Wind ad or silently dumps the at-risk pot.
+
 ### Phase 3 — UI overhaul + onboarding + the App Store listing
 - Full visual polish pass on every screen.
 - A first-session tutorial that teaches tap + the push-your-luck choice in <60s.

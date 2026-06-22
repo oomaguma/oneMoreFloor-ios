@@ -107,6 +107,9 @@ struct PrestigeUpgrade: Identifiable {
         case "autosell":
             if level == 0 { return "Auto-sell Common drops" }
             return "Auto-sell ≤ \(ItemRarity.allCases[level - 1].label)"
+        case "soulanchor":   return "Keep \(level * 15)% of at-risk gold on death"
+        case "avarice":      return "Greed cap ×\(Int(DungeonGame.greedCap) + level)"
+        case "adrenaline":   return "Ability cooldowns -\(level * 10)%"
         default:             return "Lv\(level)"
         }
     }
@@ -233,6 +236,11 @@ class DungeonGame {
         PrestigeUpgrade(id: "speed",        name: "Battle Hardened",   detail: "Faster auto-battle & offline speed",         shardCost: 12, maxLevel: 3),
         PrestigeUpgrade(id: "autorestart",  name: "Undying Will",      detail: "Keep farming offline after a death",          shardCost: 30, maxLevel: 1),
         PrestigeUpgrade(id: "autosell",     name: "Merchant's Eye",    detail: "Auto-sell drops below a rarity threshold", shardCost: 12, maxLevel: 3),
+        // Phase 2 rework — prestige upgrades that reward the new mechanics.
+        // Appended at the END so existing saves keep their by-index levels.
+        PrestigeUpgrade(id: "soulanchor",   name: "Soul Anchor",       detail: "Keep some at-risk gold when you fall",     shardCost: 15, maxLevel: 3),
+        PrestigeUpgrade(id: "avarice",      name: "Avarice",           detail: "Raise the greed multiplier cap",           shardCost: 12, maxLevel: 3),
+        PrestigeUpgrade(id: "adrenaline",   name: "Adrenaline",        detail: "Ability cooldowns recover faster",         shardCost: 12, maxLevel: 3),
     ]
 
     var combatLog: [String] = []
@@ -328,6 +336,21 @@ class DungeonGame {
         let runLvl      = upgrades.first(where: { $0.id == "goldmult" })?.level ?? 0
         let prestigeLvl = prestigeUpgrades.first(where: { $0.id == "goldrush" })?.level ?? 0
         return 1.0 + Double(runLvl) * 0.10 + Double(prestigeLvl) * 0.15
+    }
+
+    // MARK: - New-mechanic prestige bonuses (Phase 2 rework)
+
+    /// Soul Anchor: the fraction of the at-risk pot you keep when you fall.
+    private var soulAnchorFraction: Double {
+        Double(prestigeUpgrades.first(where: { $0.id == "soulanchor" })?.level ?? 0) * 0.15
+    }
+    /// Avarice: raises the greed ceiling. Public so the descent-bar gauge scales.
+    var effectiveGreedCap: Double {
+        DungeonGame.greedCap + Double(prestigeUpgrades.first(where: { $0.id == "avarice" })?.level ?? 0)
+    }
+    /// Adrenaline: scales ability cooldowns down (1.0 = unchanged).
+    private var abilityCooldownScale: Double {
+        1.0 - Double(prestigeUpgrades.first(where: { $0.id == "adrenaline" })?.level ?? 0) * 0.10
     }
 
     // Gold awarded for slaying the enemy on a given floor. This formula used to
@@ -452,7 +475,10 @@ class DungeonGame {
         stripActiveEffects()
         usableItems         = []
         pendingFloorEvent   = nil
-        atRiskGold          = 0      // at-risk gold is forfeited when you give up the run
+        // Soul Anchor salvages a fraction of the pot before the rest is forfeited.
+        let anchored = Int(Double(atRiskGold) * soulAnchorFraction)
+        if anchored > 0 { gold += anchored; log("⚓ Soul Anchor salvages \(anchored)g.") }
+        atRiskGold          = 0
         greedMultiplier     = 1.0
         pendingRestSite     = false
         abilityCooldownRemaining = 0
@@ -548,7 +574,7 @@ class DungeonGame {
             currentFloor   += 1
             deepestFloorEver = max(deepestFloorEver, currentFloor)
             // Push-your-luck: every floor cleared without resting cranks greed up.
-            greedMultiplier = min(DungeonGame.greedCap, greedMultiplier + DungeonGame.greedPerFloor)
+            greedMultiplier = min(effectiveGreedCap, greedMultiplier + DungeonGame.greedPerFloor)
             // Boss floors hand out a rest-site decision (below) instead of a
             // random floor event, so only roll an event on non-boss floors.
             if !isBossKill { checkForFloorEvent() }
@@ -716,7 +742,7 @@ class DungeonGame {
         let a = character.signatureAbility
         // Don't waste a damage burst when there's no enemy in front of you.
         if case .burst = a.effect, !inCombat { return }
-        abilityCooldownRemaining = a.cooldown
+        abilityCooldownRemaining = a.cooldown * abilityCooldownScale
         switch a.effect {
         case .burst(let hits):
             log("⚔️ \(a.name)!")

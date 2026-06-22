@@ -1458,7 +1458,7 @@ struct DescentBarView: View {
     private var greedText: String { String(format: "%.1f", game.greedMultiplier) }
 
     private var greedFraction: Double {
-        let span = DungeonGame.greedCap - 1.0
+        let span = game.effectiveGreedCap - 1.0
         guard span > 0 else { return 0 }
         return min(1.0, max(0, (game.greedMultiplier - 1.0) / span))
     }
