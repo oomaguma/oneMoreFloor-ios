@@ -165,12 +165,6 @@ class DungeonGame {
     // @AppStorage directly from that task can capture a stale snapshot.
     var autoBattle: Bool = false
 
-    // Idle fallback: in the foreground, if the player hasn't tapped for a few
-    // seconds during combat, the game auto-takes turns so leaving the screen up
-    // never just freezes. A real tap (playerStrike / playerDodge) resets this.
-    private var secondsSinceAction: Double = 0
-    static let idleAutoThreshold = 3.0
-
     // MARK: - Boss gimmick state (Phase 2c)
     //
     // A boss gets its zone's signature gimmick when it spawns. State here is
@@ -518,13 +512,9 @@ class DungeonGame {
         }
 
         if inCombat {
-            // Turn-based: manual combat waits for the player's tap. The Auto
-            // toggle — or the idle fallback after a few seconds of no tap —
-            // takes a turn each tick so progress never just freezes on-screen.
-            secondsSinceAction += tickInterval
-            if autoBattle || secondsSinceAction >= DungeonGame.idleAutoThreshold {
-                autoTurn()
-            }
+            // Turn-based: in manual mode combat waits for the player's tap.
+            // Auto-battle (the toggle) takes a full turn each tick instead.
+            if autoBattle { autoTurn() }
         } else {
             if heroRegen > 0 && heroHp < heroMaxHp {
                 heroHp = min(heroMaxHp, heroHp + heroRegen)
@@ -806,9 +796,7 @@ class DungeonGame {
     /// One automated turn for Auto-battle: dodge a telegraphed heavy, else strike.
     /// Mirrors what an attentive player would tap.
     private func autoTurn() {
-        // Calls the resolvers directly (not playerStrike/playerDodge) so an
-        // auto-turn does NOT reset the idle timer — only a real tap does.
-        if incomingHeavy { resolveDodgeTurn() } else { resolveStrikeTurn() }
+        if incomingHeavy { playerDodge() } else { playerStrike() }
     }
 
     /// Whether the player can act right now (gates the pad + its tap juice).
@@ -819,11 +807,6 @@ class DungeonGame {
     /// this is the "strike through" choice: attack but eat the heavy, unless
     /// your blow kills it first.
     func playerStrike() {
-        secondsSinceAction = 0      // a real tap takes manual control / resets the idle timer
-        resolveStrikeTurn()
-    }
-
-    private func resolveStrikeTurn() {
         guard canTap else { return }
         if incomingHeavy {
             heroStrike()
@@ -838,11 +821,6 @@ class DungeonGame {
     /// The player's turn spent dodging a telegraphed heavy: it's negated and the
     /// hero doesn't attack. Safe, but it costs you a turn of offense.
     func playerDodge() {
-        secondsSinceAction = 0
-        resolveDodgeTurn()
-    }
-
-    private func resolveDodgeTurn() {
         guard incomingHeavy, !isGameOver, !pendingRestSite else { return }
         incomingHeavy = false
         onHeroDodge?()
