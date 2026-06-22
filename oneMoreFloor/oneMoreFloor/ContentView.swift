@@ -60,7 +60,9 @@ struct TitleScreenView: View {
     let onContinue: () -> Void
     let onNewHero: () -> Void
 
-    @State private var pulse = false
+    @State private var pulse  = false
+    @State private var bob    = false
+    @State private var bgZoom = false
 
     var body: some View {
         GeometryReader { geo in
@@ -71,6 +73,7 @@ struct TitleScreenView: View {
                     .interpolation(.none)
                     .scaledToFill()
                     .frame(width: geo.size.width, height: geo.size.height)
+                    .scaleEffect(bgZoom ? 1.06 : 1.0)   // slow Ken Burns drift
                     .clipped()
 
                 // Darken the bottom so the buttons stay legible.
@@ -78,12 +81,16 @@ struct TitleScreenView: View {
                                startPoint: .center, endPoint: .bottom)
                     .ignoresSafeArea()
 
+                // Ambient embers rising over the backdrop (purely decorative).
+                EmberFieldView(size: geo.size)
+
                 VStack(spacing: 0) {
                     Image("title_logo")
                         .resizable()
                         .interpolation(.none)
                         .scaledToFit()
                         .frame(maxWidth: geo.size.width * 0.82)
+                        .offset(y: bob ? -6 : 6)   // gentle float
                         .shadow(color: .black.opacity(0.55), radius: 0, x: 0, y: 3)
                         .padding(.top, max(48, geo.size.height * 0.09))
                         .background(
@@ -116,6 +123,12 @@ struct TitleScreenView: View {
                 withAnimation(.easeInOut(duration: 2.2).repeatForever(autoreverses: true)) {
                     pulse = true
                 }
+                withAnimation(.easeInOut(duration: 3.4).repeatForever(autoreverses: true)) {
+                    bob = true
+                }
+                withAnimation(.easeInOut(duration: 14).repeatForever(autoreverses: true)) {
+                    bgZoom = true
+                }
             }
         }
         .preferredColorScheme(.dark)
@@ -142,6 +155,52 @@ struct TitleScreenView: View {
                 )
                 .shadow(color: .black.opacity(0.4), radius: 6, y: 3)
         }
+    }
+}
+
+// MARK: - Title Embers
+
+/// Ambient embers drifting up the title screen. Purely decorative — it never
+/// intercepts touches, so the menu buttons underneath stay tappable.
+struct EmberFieldView: View {
+    let size: CGSize
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<16, id: \.self) { i in
+                EmberView(fieldSize: size, seed: i)
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .allowsHitTesting(false)
+    }
+}
+
+struct EmberView: View {
+    let fieldSize: CGSize
+    let seed: Int
+    @State private var rise = false
+
+    // Seed-derived parameters so the embers look organic instead of synced.
+    private var startX: CGFloat  { fieldSize.width * CGFloat(seed * 53 % 100) / 100 }
+    private var drift: CGFloat   { CGFloat(seed * 37 % 60) - 30 }   // sideways sway
+    private var dotSize: CGFloat { CGFloat(2 + seed * 17 % 4) }      // 2…5 px
+    private var duration: Double { 6 + Double(seed * 13 % 6) }       // 6…11 s rise
+    private var delay: Double    { Double(seed * 29 % 70) / 10.0 }   // staggered start
+
+    var body: some View {
+        Circle()
+            .fill(Color(red: 1.0, green: 0.64, blue: 0.28))
+            .frame(width: dotSize, height: dotSize)
+            .blur(radius: 1)
+            .opacity(rise ? 0.0 : 0.75)
+            .position(x: startX + (rise ? drift : 0),
+                      y: rise ? -10 : fieldSize.height + 10)
+            .onAppear {
+                withAnimation(.easeIn(duration: duration).repeatForever(autoreverses: false).delay(delay)) {
+                    rise = true
+                }
+            }
     }
 }
 
