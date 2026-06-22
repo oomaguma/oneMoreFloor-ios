@@ -393,38 +393,80 @@ struct GameView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    StatusBarView(game: game)
-                    Button { autoBattle.toggle() } label: {
-                        VStack(spacing: 1) {
-                            Image(systemName: autoBattle ? "play.circle.fill" : "hand.tap")
-                                .font(.system(size: 15))
-                            Text("AUTO")
-                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                VStack(spacing: 8) {
+                    // Top row: where you are + the quick controls.
+                    HStack(alignment: .center) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Floor \(game.currentFloor)")
+                                .font(.system(size: 18, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.white)
+                                .monospacedDigit()
+                            Text("\(game.currentZone.icon)  \(game.currentZone.shortName)")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(Color.white.opacity(0.55))
                         }
-                        .foregroundStyle(autoBattle ? Color(red: 0.40, green: 0.95, blue: 0.55) : Color.white.opacity(0.50))
-                        .frame(width: 44, height: 44)
-                        .background(Color(white: 0.11))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(autoBattle ? Color(red: 0.25, green: 0.65, blue: 0.35) : Color.white.opacity(0.09), lineWidth: 1))
+                        Spacer()
+                        HStack(spacing: 12) {
+                            Button { autoBattle.toggle() } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: autoBattle ? "play.circle.fill" : "hand.tap")
+                                        .font(.system(size: 13))
+                                    Text("AUTO")
+                                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                                }
+                                .foregroundStyle(autoBattle ? Color(red: 0.40, green: 0.95, blue: 0.55) : Color.white.opacity(0.50))
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 7)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 9)
+                                        .fill(Color(white: 0.11))
+                                        .overlay(RoundedRectangle(cornerRadius: 9).stroke(autoBattle ? Color(red: 0.25, green: 0.65, blue: 0.35) : Color.white.opacity(0.09), lineWidth: 1))
+                                )
+                            }
+                            Button { showSettings = true } label: {
+                                Image(systemName: "gearshape.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundStyle(Color.white.opacity(0.55))
+                            }
+                            Button { showStore = true } label: {
+                                Image(systemName: "cart.fill")
+                                    .font(.system(size: 18))
+                                    .foregroundStyle(Color(red: 1.00, green: 0.75, blue: 0.25).opacity(0.90))
+                            }
+                        }
                     }
-                    Button { showSettings = true } label: {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 16))
-                            .foregroundStyle(Color.white.opacity(0.60))
-                            .frame(width: 44, height: 44)
-                            .background(Color(white: 0.11))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.09), lineWidth: 1))
-                    }
-                    Button { showStore = true } label: {
-                        Image(systemName: "cart.fill")
-                            .font(.system(size: 16))
-                            .foregroundStyle(Color(red: 1.00, green: 0.75, blue: 0.25).opacity(0.85))
-                            .frame(width: 44, height: 44)
-                            .background(Color(white: 0.11))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.09), lineWidth: 1))
+                    // Spendable currencies — banked gold + soul shards.
+                    HStack(spacing: 8) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "dollarsign.circle.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color(red: 0.91, green: 0.72, blue: 0.29))
+                            Text("\(game.gold)")
+                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Color(red: 0.93, green: 0.85, blue: 0.56))
+                                .monospacedDigit()
+                            Text("banked")
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundStyle(Color.white.opacity(0.40))
+                            Spacer()
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .frame(maxWidth: .infinity)
+                        .background(RoundedRectangle(cornerRadius: 9).fill(Color(white: 0.10)))
+
+                        HStack(spacing: 5) {
+                            Image(systemName: "diamond.fill")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color(red: 0.50, green: 0.78, blue: 0.90))
+                            Text("\(game.soulShards)")
+                                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Color(red: 0.66, green: 0.86, blue: 0.94))
+                                .monospacedDigit()
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(RoundedRectangle(cornerRadius: 9).fill(Color(white: 0.10)))
                     }
                 }
                 .padding(.horizontal, 16)
@@ -1178,6 +1220,88 @@ struct ZoneNodeView: View {
 
 // MARK: - Battle Tab
 
+// MARK: - Combat Arena
+
+/// The framed fight: enemy name + boss badge + HP on top, the animated sprites
+/// in the middle, the hero's HP below — all in one panel. Replaces the old
+/// separate sprite view + side-by-side status view.
+struct CombatArenaView: View {
+    let game: DungeonGame
+    let combatScene: CombatScene
+    let spriteOpacity: Double
+
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    var body: some View {
+        VStack(spacing: 8) {
+            // Enemy: name, boss-gimmick badge, and HP.
+            VStack(spacing: 5) {
+                HStack(spacing: 7) {
+                    Text(game.displayMonsterName.isEmpty ? "—" : game.displayMonsterName.uppercased())
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(game.displayIsBoss
+                            ? Color(red: 1.0, green: 0.55, blue: 0.10)
+                            : Color(red: 0.90, green: 0.62, blue: 0.62))
+                    if let status = game.bossStatusText {
+                        Text(status)
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(status == "SHIELDED"
+                                ? Color(red: 0.45, green: 0.80, blue: 1.0)
+                                : Color(red: 1.0, green: 0.40, blue: 0.32))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.08)))
+                    }
+                    Spacer()
+                    if game.displayMonsterMaxHp > 0 {
+                        Text("\(game.displayMonsterHp) / \(game.displayMonsterMaxHp)")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.60))
+                            .monospacedDigit()
+                    }
+                }
+                HealthBar(pct: monsterPct, color: Color(red: 0.85, green: 0.22, blue: 0.22))
+            }
+
+            SpriteView(scene: combatScene, options: [.allowsTransparency])
+                .frame(height: horizontalSizeClass == .regular ? 320 : 230)
+                .frame(maxWidth: .infinity)
+                .opacity(spriteOpacity)
+
+            // Hero HP.
+            HStack(spacing: 8) {
+                Image(systemName: "heart.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(heroColor)
+                HealthBar(pct: heroPct, color: heroColor)
+                Text("\(game.heroHp) / \(game.heroMaxHp)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.70))
+                    .monospacedDigit()
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(red: 0.10, green: 0.10, blue: 0.15))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.white.opacity(0.07), lineWidth: 1))
+        )
+        .padding(.horizontal, 12)
+    }
+
+    private var heroPct: Double {
+        game.heroMaxHp > 0 ? Double(max(0, game.heroHp)) / Double(game.heroMaxHp) : 0
+    }
+    private var monsterPct: Double {
+        game.displayMonsterMaxHp > 0 ? Double(max(0, game.displayMonsterHp)) / Double(game.displayMonsterMaxHp) : 0
+    }
+    private var heroColor: Color {
+        if heroPct > 0.5  { return Color(red: 0.25, green: 0.85, blue: 0.40) }
+        if heroPct > 0.25 { return Color(red: 0.95, green: 0.78, blue: 0.18) }
+        return Color(red: 0.90, green: 0.22, blue: 0.22)
+    }
+}
+
 struct BattleTabView: View {
     let game: DungeonGame
     let combatScene: CombatScene
@@ -1187,24 +1311,21 @@ struct BattleTabView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
-        VStack(spacing: 0) {
-            SpriteView(scene: combatScene, options: [.allowsTransparency])
-                .frame(height: horizontalSizeClass == .regular ? 380 : 260)
-                .frame(maxWidth: 560)
-                .frame(maxWidth: .infinity)
-                .opacity(spriteOpacity)
-            CombatStatusView(game: game)
-            // Run buffs + consumables sit up here with the status, kept out of the
-            // bottom tap zone so a stray strike can't open a blessing or burn a vial.
+        VStack(spacing: 8) {
+            // Featured greed + at-risk panel — the game's identity, up top.
+            DescentBarView(game: game, onRest: { game.rest() })
+            // Combat arena — enemy on top, sprites in the middle, hero HP below.
+            CombatArenaView(game: game, combatScene: combatScene, spriteOpacity: spriteOpacity)
+            // Secondary status — run buffs + consumables, kept out of the tap zone.
             ActiveEffectsBarView(game: game)
             ConsumablesBarView(game: game)
-            DescentBarView(game: game, onRest: { game.rest() })
-            MapView(game: game)
+            Spacer(minLength: 0)
             AbilityButtonView(game: game)
             // The strike pad owns the bottom thumb zone, kept clear of anything
             // tappable so rapid taps can't trigger an ad or a mis-tap.
             StrikePadView(game: game, combatScene: combatScene, autoBattle: autoBattle)
         }
+        .padding(.top, 6)
         .background(Color(red: 0.07, green: 0.07, blue: 0.11))
     }
 }
@@ -1404,71 +1525,69 @@ struct DescentBarView: View {
     var onRest: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Greed meter — the tension number, rising each floor without a rest.
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 0) {
-                    Text("🔥 GREED")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundStyle(Color(red: 0.95, green: 0.45, blue: 0.25))
-                    Spacer()
-                    Text("×\(greedText)")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundStyle(Color(red: 1.0, green: 0.60, blue: 0.35))
-                        .monospacedDigit()
-                }
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color(white: 0.16))
-                            .frame(height: 6)
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color(red: 0.90, green: 0.40, blue: 0.20))
-                            .frame(width: max(0, geo.size.width * greedFraction), height: 6)
-                    }
-                }
-                .frame(height: 6)
-                .animation(.easeOut(duration: 0.2), value: greedFraction)
-            }
-
-            // At-risk gold — earned this descent, lost on death until banked.
-            VStack(alignment: .leading, spacing: 2) {
-                Text("AT RISK")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Color(red: 0.95, green: 0.62, blue: 0.30))
-                Text("\(game.atRiskGold)g")
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundStyle(Color(red: 1.0, green: 0.72, blue: 0.40))
+        VStack(spacing: 9) {
+            // Greed — the game's identity, given the spotlight.
+            HStack(alignment: .center) {
+                Text("🔥 GREED")
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(red: 0.95, green: 0.52, blue: 0.30))
+                Spacer()
+                Text("×\(greedText)")
+                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(red: 1.0, green: 0.62, blue: 0.36))
                     .monospacedDigit()
             }
-            .frame(minWidth: 60, alignment: .leading)
-
-            // Voluntary rest — bank the pot, heal, reset greed. Always available
-            // so the player can cash out any time, not just at a rest site.
-            Button(action: onRest) {
-                VStack(spacing: 1) {
-                    Image(systemName: "tent.fill")
-                        .font(.system(size: 13))
-                    Text("REST")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4).fill(Color(white: 0.17)).frame(height: 7)
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(red: 0.90, green: 0.40, blue: 0.20))
+                        .frame(width: max(0, geo.size.width * greedFraction), height: 7)
                 }
-                .foregroundStyle(restEnabled ? Color(red: 0.4, green: 0.95, blue: 0.55) : Color.white.opacity(0.25))
-                .frame(width: 52, height: 40)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(restEnabled ? Color(red: 0.05, green: 0.18, blue: 0.08) : Color.white.opacity(0.04))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10)
-                                .strokeBorder(restEnabled ? Color(red: 0.25, green: 0.65, blue: 0.3) : Color.white.opacity(0.10),
-                                              lineWidth: 1)
-                        )
-                )
             }
-            .buttonStyle(.plain)
-            .disabled(!restEnabled)
+            .frame(height: 7)
+            .animation(.easeOut(duration: 0.2), value: greedFraction)
+
+            // At-risk gold + the always-available cash-out.
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color(red: 0.85, green: 0.55, blue: 0.30))
+                Text("at risk if you fall")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color(red: 0.80, green: 0.62, blue: 0.48))
+                Spacer()
+                Text("\(game.atRiskGold)g")
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(red: 1.0, green: 0.72, blue: 0.40))
+                    .monospacedDigit()
+                Button(action: onRest) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "tent.fill").font(.system(size: 11))
+                        Text("REST").font(.system(size: 10, weight: .bold, design: .monospaced))
+                    }
+                    .foregroundStyle(restEnabled ? Color(red: 0.4, green: 0.95, blue: 0.55) : Color.white.opacity(0.25))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 9)
+                            .fill(restEnabled ? Color(red: 0.05, green: 0.18, blue: 0.08) : Color.white.opacity(0.04))
+                            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(restEnabled ? Color(red: 0.25, green: 0.65, blue: 0.3) : Color.white.opacity(0.10), lineWidth: 1))
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(!restEnabled)
+                .padding(.leading, 2)
+            }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(red: 0.13, green: 0.09, blue: 0.10))
+                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color(red: 0.88, green: 0.40, blue: 0.24).opacity(0.45), lineWidth: 1))
+        )
+        .padding(.horizontal, 12)
     }
 
     private var greedText: String { String(format: "%.1f", game.greedMultiplier) }
