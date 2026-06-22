@@ -375,6 +375,8 @@ struct GameView: View {
     @State private var showSettings = false
     @AppStorage("com.oneMoreFloor.notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("com.oneMoreFloor.autoBattleEnabled")    private var autoBattle           = false
+    @AppStorage("com.oneMoreFloor.seenIntro")            private var seenIntro            = false
+    @State private var showIntro = false
 
     init(character: CharacterClass, onChangeCharacter: @escaping () -> Void) {
         self.character = character
@@ -531,9 +533,13 @@ struct GameView: View {
                 .presentationDragIndicator(.visible)
                 .presentationSizing(.page)
         }
+        .fullScreenCover(isPresented: $showIntro) {
+            IntroCardView(onBegin: { seenIntro = true; showIntro = false })
+        }
         .preferredColorScheme(.dark)
         .onAppear {
             game.autoBattle = autoBattle
+            if !seenIntro { showIntro = true }   // first-run onboarding
             if let summary = game.handleForeground() {
                 offlineSummary = summary
             }
@@ -656,7 +662,7 @@ struct GameView: View {
                 // paused during transitions, the rest decision, and whenever a
                 // menu/sheet is open so the player has time to manage. In manual
                 // mode the tick only handles regen/spawn; taps drive the fight.
-                let menuOpen = selectedTab != .battle || showStore || showSettings
+                let menuOpen = selectedTab != .battle || showStore || showSettings || showIntro
                 if !isFading && !game.pendingRestSite && !menuOpen {
                     game.tick()
                 }
@@ -1754,6 +1760,76 @@ struct FloorEventCardView: View {
 }
 
 // MARK: - Rest Site (push-your-luck decision)
+
+// MARK: - First-run Onboarding
+
+/// Shown once on the first run (gated by the `seenIntro` flag). Frames the new
+/// push-your-luck loop in three beats, since the combat is no longer a passive
+/// idle game and new players need to know to tap, push, and bank.
+struct IntroCardView: View {
+    let onBegin: () -> Void
+
+    private let gold = Color(red: 1.0, green: 0.82, blue: 0.30)
+
+    var body: some View {
+        ZStack {
+            Color(red: 0.07, green: 0.07, blue: 0.11).ignoresSafeArea()
+
+            VStack(spacing: 22) {
+                Spacer()
+                Text("⚔️").font(.system(size: 52))
+                Text("HOW TO SURVIVE")
+                    .font(.system(size: 22, weight: .bold, design: .monospaced))
+                    .foregroundStyle(gold)
+
+                VStack(alignment: .leading, spacing: 18) {
+                    introRow(icon: "hand.tap.fill", tint: Color(red: 1.0, green: 0.45, blue: 0.35),
+                             title: "TAP TO FIGHT",
+                             body: "Tap to strike. Stop tapping and your hero auto-battles on its own.")
+                    introRow(icon: "flame.fill", tint: Color(red: 0.95, green: 0.45, blue: 0.25),
+                             title: "PUSH YOUR LUCK",
+                             body: "The deeper you descend without resting, the higher your GREED — more gold and better loot.")
+                    introRow(icon: "lock.open.fill", tint: gold,
+                             title: "BANK OR LOSE IT",
+                             body: "Gold you earn is AT RISK until you bank it at a camp. Die and it's gone. How greedy do you dare to be?")
+                }
+                .padding(.horizontal, 8)
+
+                Spacer()
+
+                Button(action: onBegin) {
+                    Text("DESCEND")
+                        .font(.system(size: 17, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 15)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(gold))
+                }
+                .padding(.bottom, 8)
+            }
+            .padding(28)
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private func introRow(icon: String, tint: Color, title: String, body: String) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 22))
+                .foregroundStyle(tint)
+                .frame(width: 32)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.white)
+                Text(body)
+                    .font(.system(size: 13, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.65))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
 
 struct RestSiteCardView: View {
     let game: DungeonGame
