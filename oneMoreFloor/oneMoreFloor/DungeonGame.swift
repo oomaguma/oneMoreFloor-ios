@@ -115,6 +115,16 @@ struct PrestigeUpgrade: Identifiable {
     }
 }
 
+// MARK: - Boss Gimmick
+
+/// Each zone's boss has a signature behavior beyond inflated stats (Phase 2c).
+enum BossGimmick: String {
+    case none      // a normal enemy, or a boss with no special behavior
+    case enrage    // hits harder once its HP drops low
+    case shield    // periodically blunts the hero's strikes
+    case lifesteal // periodically regenerates HP
+}
+
 @Observable
 class DungeonGame {
     var heroHp: Int
@@ -160,6 +170,36 @@ class DungeonGame {
     // never just freezes. A real tap (playerStrike / playerDodge) resets this.
     private var secondsSinceAction: Double = 0
     static let idleAutoThreshold = 3.0
+
+    // MARK: - Boss gimmick state (Phase 2c)
+    //
+    // A boss gets its zone's signature gimmick when it spawns. State here is
+    // per-fight; gimmick effects only run in live (foreground) combat.
+    private(set) var bossGimmick: BossGimmick = .none
+    private var bossShieldHits: Int = 0     // strikes the current shield still absorbs
+    private var bossTurnCount: Int = 0       // boss turns taken (shield/heal cadence)
+    private var bossEnrageAnnounced = false
+
+    static let enrageThreshold     = 0.40    // boss HP fraction at which enrage kicks in
+    static let enrageDamageMult    = 1.5     // enraged boss hits this much harder
+    static let shieldEveryTurns    = 4       // boss raises a shield every N of its turns
+    static let shieldHits          = 3       // strikes a raised shield blunts
+    static let shieldDamageMult    = 0.35    // hero damage multiplier vs a shielded boss
+    static let lifestealEveryTurns = 3       // boss heals every N of its turns
+    static let lifestealFraction   = 0.08    // fraction of max HP the boss heals
+
+    var bossEnraged: Bool {
+        bossGimmick == .enrage && monsterMaxHp > 0 &&
+        Double(monsterHp) / Double(monsterMaxHp) < DungeonGame.enrageThreshold
+    }
+    var bossShielded: Bool { bossShieldHits > 0 }
+    /// Short status shown under the boss's name while a gimmick is active.
+    var bossStatusText: String? {
+        guard displayIsBoss else { return nil }
+        if bossShielded { return "SHIELDED" }
+        if bossEnraged  { return "ENRAGED" }
+        return nil
+    }
 
     // MARK: - Active ability state (Phase 2)
     //
@@ -327,6 +367,19 @@ class DungeonGame {
         "citadel":  .greatswordSkeleton,
         "hellgate": .greatswordSkeleton,
     ]
+
+    /// The signature gimmick for each zone's boss (Phase 2c).
+    static func bossGimmick(forZone zoneID: String) -> BossGimmick {
+        switch zoneID {
+        case "entrance": return .enrage
+        case "crypts":   return .shield
+        case "orc":      return .enrage
+        case "sunken":   return .lifesteal
+        case "abyss":    return .shield
+        case "citadel":  return .enrage
+        default:         return .lifesteal   // Hell's Gate and beyond
+        }
+    }
 
     static func stageLabel(floor: Int) -> String {
         let zone  = (floor - 1) / 10 + 1
@@ -548,6 +601,11 @@ class DungeonGame {
         monsterMaxHp     = enemy.scaledHp(floor: f, isBoss: isBoss)
         monsterHp        = monsterMaxHp
         monsterAtk       = enemy.scaledAtk(floor: f, isBoss: isBoss)
+        // Phase 2c: a boss gets its zone's signature gimmick; normal enemies none.
+        bossGimmick         = isBoss ? DungeonGame.bossGimmick(forZone: currentZone.id) : .none
+        bossShieldHits      = 0
+        bossTurnCount       = 0
+        bossEnrageAnnounced = false
         inCombat         = true
         displayMonsterHp    = monsterHp
         displayMonsterMaxHp = monsterMaxHp
@@ -568,8 +626,20 @@ class DungeonGame {
         onHeroAttack?()
 
         let isCrit  = Double.random(in: 0...1) < heroCritChance
-        let heroDmg = max(1, isCrit ? heroAtk * 2 : heroAtk)
+        var heroDmg = max(1, isCrit ? heroAtk * 2 : heroAtk)
+        // A shielded boss blunts incoming strikes, and the shield wears down.
+        if bossShielded {
+            heroDmg = max(1, Int(Double(heroDmg) * DungeonGame.shieldDamageMult))
+            bossShieldHits -= 1
+            if bossShieldHits == 0 { log("\(monsterName)'s shield shatters!") }
+        }
         monsterHp -= heroDmg
+
+        // Announce enrage once, the first time the boss is knocked low.
+        if !bossEnrageAnnounced, monsterHp > 0, bossEnraged {
+            bossEnrageAnnounced = true
+            log("💢 \(monsterName) is ENRAGED!")
+        }
 
         if monsterHp <= 0 {
             let killedOnFloor = currentFloor
@@ -675,6 +745,7 @@ class DungeonGame {
             log("\(character.name) blocks the attack!")
         } else {
             var dmg = max(1, monsterAtk - heroDef)
+            if bossEnraged { dmg = Int(Double(dmg) * DungeonGame.enrageDamageMult) }   // enraged boss hits harder
             // Shield Wall (and any future guard effect) softens the blow.
             if guardSecondsRemaining > 0 { dmg = max(1, Int(Double(dmg) * (1 - guardReduction))) }
             heroHp = max(0, heroHp - dmg)
@@ -690,6 +761,25 @@ class DungeonGame {
     /// it sets `incomingHeavy`, and the player's next action resolves it.
     private func enemyTurn() {
         guard !incomingHeavy else { return }   // already winding up; waits for the player
+
+        // Phase 2c: on a cadence, a boss spends its turn on its gimmick instead
+        // of attacking. (Enrage is passive — handled in the damage code.)
+        if DungeonGame.isBoss(floor: currentFightFloor) {
+            bossTurnCount += 1
+            if bossGimmick == .shield, bossTurnCount % DungeonGame.shieldEveryTurns == 0 {
+                bossShieldHits = DungeonGame.shieldHits
+                log("🛡 \(monsterName) raises a shield — strikes are blunted!")
+                return
+            }
+            if bossGimmick == .lifesteal, bossTurnCount % DungeonGame.lifestealEveryTurns == 0 {
+                let heal = max(1, Int(Double(monsterMaxHp) * DungeonGame.lifestealFraction))
+                monsterHp = min(monsterMaxHp, monsterHp + heal)
+                displayMonsterHp = monsterHp
+                log("✚ \(monsterName) regenerates \(heal) HP!")
+                return
+            }
+        }
+
         let heavyChance = DungeonGame.isBoss(floor: currentFightFloor)
             ? DungeonGame.heavyChanceBoss : DungeonGame.heavyChanceNormal
         if Double.random(in: 0...1) < heavyChance {
@@ -704,6 +794,7 @@ class DungeonGame {
     /// The wound-up heavy landing on the hero (heavyAttackMultiplier× a normal hit).
     private func resolveHeavyHit() {
         var dmg = max(1, Int(Double(monsterAtk) * DungeonGame.heavyAttackMultiplier) - heroDef)
+        if bossEnraged { dmg = Int(Double(dmg) * DungeonGame.enrageDamageMult) }
         if guardSecondsRemaining > 0 { dmg = max(1, Int(Double(dmg) * (1 - guardReduction))) }
         heroHp = max(0, heroHp - dmg)
         onMonsterAttack?()

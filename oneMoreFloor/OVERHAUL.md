@@ -1,6 +1,6 @@
 # oneMoreFloor — The Overhaul
 
-**Status:** Phase 1 complete & compiling clean (2026-06-22) — pending in-game playtest/tuning. Phases 2–4 not started.
+**Status:** Phases 1 & 2 complete & compiling clean (2026-06-22), under active playtest/tuning. Phase 3 (UI overhaul + onboarding + ASO) and Phase 4 (monetization) not started; some Phase 4 rewarded-ad placements landed early.
 **Goal:** Turn a passive idle game into the push-your-luck climber its title promises.
 
 This is the living design + build spec for the overhaul. It is the source of truth — keep it current as we build. When a mechanic changes in code, change it here too.
@@ -87,10 +87,10 @@ The smallest change that fixes the dead first session. Ship it, watch D1/D7 move
 
 > Implementation notes for whoever picks this up next: the live combat path (`heroStrike`/`enemyRetaliate`) is separate from the headless offline sim by design. The greed/at-risk model only changes the *live* path plus an auto-rest at the top of `simulateOffline`. The stake model (at-risk gold is unspendable until banked) is **open tuning question #1** below — change it there if playtest says so.
 
-### Phase 2 — Skill & depth (in progress)
+### Phase 2 — Skill & depth — ✅ COMPLETE (compiles clean; needs playtest/tuning)
 - [x] **2a. Active abilities.** Each class has one signature ability on a cooldown, leaning into its identity: damage *bursts* (Soldier/Swordsman/Lancer/Archer/Wizard — implemented as N reused `heroStrike()` calls, so each hit crits and can land the kill), heals (Knight Templar / Priest), and the Knight's "Shield Wall" guard (temporary incoming-damage cut). Data on `CharacterClass.signatureAbility`; runtime (`abilityCooldownRemaining`, `activateAbility()`, guard window) in `DungeonGame`; `AbilityButtonView` above the strike pad. *This is also what finally makes the 8 classes play differently, not just start differently.* Cooldowns/hit-counts are first-draft — tune in playtest.
 - [x] **2b. Telegraphed enemy attacks + dodge/block.** Some enemy turns are *heavy*: the enemy telegraphs (scale-pulse + ⚠ glyph + warning haptic) over `windUpTicks` ticks, and the strike pad flips into a "TAP TO DODGE!" button in the same thumb spot. Dodge in the window → negated; miss → `heavyAttackMultiplier`× damage. Bosses telegraph more often (`heavyChanceBoss`). All knobs are constants in `DungeonGame`. *Window length/feel is the #1 thing to tune in playtest — at the fastest attack speed the window is tight.*
-- [ ] **2c. Boss gimmicks.** Bosses get real behavior (enrage, shield phases, summons), not just inflated stats.
+- [x] **2c. Boss gimmicks.** Each zone's boss has a signature behavior (`BossGimmick`, assigned per zone, foreground-only): **Enrage** (+50% damage below 40% HP), **Shield** (every 4 turns it blunts your strikes to 35% for 3 hits), **Lifesteal** (every 3 turns it regenerates 8% max HP). The active state shows as a badge under the boss's name; all knobs are constants in `DungeonGame`.
 
 **Tap-zone layout principle (2026-06-22):** the bottom of the battle screen is the player's thumb zone — it holds only intended actions (the strike pad, which doubles as the dodge button; the ability button just above it). Status that's tappable-but-incidental (blessings, consumables) was moved up next to the combat status, and the rest-site / floor-event decision cards now appear *centered* instead of sliding up from the bottom. This prevents a rapid tapper from accidentally opening a sheet, burning a consumable, or triggering an ad.
 

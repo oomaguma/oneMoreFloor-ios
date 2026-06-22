@@ -993,6 +993,16 @@ struct CombatStatusView: View {
                     .foregroundStyle(game.displayIsBoss
                         ? Color(red: 1.0, green: 0.55, blue: 0.10)
                         : Color.white.opacity(0.80))
+                if let status = game.bossStatusText {
+                    Text(status)
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundStyle(status == "SHIELDED"
+                            ? Color(red: 0.45, green: 0.80, blue: 1.0)
+                            : Color(red: 1.0, green: 0.40, blue: 0.32))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.08)))
+                }
                 HealthBar(pct: monsterPct, color: Color(red: 0.85, green: 0.22, blue: 0.22))
                 Text(game.displayMonsterMaxHp > 0
                      ? "\(game.displayMonsterHp) / \(game.displayMonsterMaxHp)"
