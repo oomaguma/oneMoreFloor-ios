@@ -8,6 +8,7 @@ struct SettingsView: View {
     @AppStorage("com.oneMoreFloor.soundEnabled")         private var soundEnabled         = true
     @AppStorage("com.oneMoreFloor.hapticsEnabled")       private var hapticsEnabled       = true
     @AppStorage("com.oneMoreFloor.notificationsEnabled") private var notificationsEnabled = true
+    @AppStorage("com.oneMoreFloor.autoEquipEnabled")     private var autoEquipEnabled     = true
 
     private let bgColor   = Color(red: 0.07, green: 0.07, blue: 0.11)
     private let cardColor = Color(red: 0.10, green: 0.10, blue: 0.16)
@@ -43,6 +44,13 @@ struct SettingsView: View {
                             iconColor: Color(red: 1.00, green: 0.65, blue: 0.20),
                             title: "Notifications",
                             isOn: $notificationsEnabled
+                        )
+                        rowDivider()
+                        toggleRow(
+                            icon: "shield.lefthalf.filled",
+                            iconColor: Color(red: 0.40, green: 0.85, blue: 0.55),
+                            title: "Auto-Equip Better Gear",
+                            isOn: $autoEquipEnabled
                         )
                     }
                     .background(RoundedRectangle(cornerRadius: 12).fill(cardColor))

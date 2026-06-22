@@ -374,6 +374,7 @@ struct GameView: View {
     @State private var showStore    = false
     @State private var showSettings = false
     @AppStorage("com.oneMoreFloor.notificationsEnabled") private var notificationsEnabled = true
+    @AppStorage("com.oneMoreFloor.autoBattleEnabled")    private var autoBattle           = false
 
     init(character: CharacterClass, onChangeCharacter: @escaping () -> Void) {
         self.character = character
@@ -392,6 +393,19 @@ struct GameView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     StatusBarView(game: game)
+                    Button { autoBattle.toggle() } label: {
+                        VStack(spacing: 1) {
+                            Image(systemName: autoBattle ? "play.circle.fill" : "hand.tap")
+                                .font(.system(size: 15))
+                            Text("AUTO")
+                                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        }
+                        .foregroundStyle(autoBattle ? Color(red: 0.40, green: 0.95, blue: 0.55) : Color.white.opacity(0.50))
+                        .frame(width: 44, height: 44)
+                        .background(Color(white: 0.11))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(autoBattle ? Color(red: 0.25, green: 0.65, blue: 0.35) : Color.white.opacity(0.09), lineWidth: 1))
+                    }
                     Button { showSettings = true } label: {
                         Image(systemName: "gearshape.fill")
                             .font(.system(size: 16))
@@ -426,7 +440,7 @@ struct GameView: View {
                         .presentationSizing(.page)
                 }
 
-                BattleTabView(game: game, combatScene: combatScene, spriteOpacity: spriteOpacity)
+                BattleTabView(game: game, combatScene: combatScene, spriteOpacity: spriteOpacity, autoBattle: autoBattle)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(red: 0.07, green: 0.07, blue: 0.11))
 
@@ -445,13 +459,26 @@ struct GameView: View {
                 .animation(.spring(response: 0.4), value: game.pendingDrop?.id)
             }
 
+            // Blessing banner — auto-applied free buff; brief and non-blocking,
+            // held back behind a drop banner or any full-screen overlay.
+            if let blessing = game.pendingBlessing, game.pendingDrop == nil, !isAnyFullScreenOverlayActive {
+                VStack {
+                    BlessingBanner(template: blessing, onDismiss: { game.dismissBlessing() })
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .padding(.top, 8)
+                    Spacer()
+                }
+                .animation(.spring(response: 0.4), value: game.pendingBlessing)
+            }
+
             // Full-screen overlays in strict priority order — only one is ever shown at a time
             if let victory = game.pendingBossVictory {
                 BossVictoryOverlay(victory: victory) { game.dismissBossVictory() }
             } else if let zone = game.pendingZoneUnlock {
                 ZoneUnlockOverlay(zone: zone) { game.dismissZoneUnlock() }
-            } else if game.isGameOver && !game.autoRestartEnabled {
+            } else if game.isGameOver {
                 GameOverOverlay(
+                    game: game,
                     adManager: adManager,
                     onRevive: {
                         game.revive()
@@ -472,6 +499,18 @@ struct GameView: View {
                     onDoubleGold: { game.gold += summary.goldEarned },
                     onDismiss: { offlineSummary = nil }
                 )
+            } else if game.pendingRestSite {
+                ZStack {
+                    Color.black.opacity(0.55)
+                        .ignoresSafeArea()
+                    VStack {
+                        Spacer()
+                        RestSiteCardView(game: game, adManager: adManager)
+                        Spacer()
+                    }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                .animation(.spring(response: 0.5, dampingFraction: 0.8), value: game.pendingRestSite)
             } else if let event = game.pendingFloorEvent {
                 ZStack {
                     Color.black.opacity(0.55)
@@ -479,7 +518,7 @@ struct GameView: View {
                     VStack {
                         Spacer()
                         FloorEventCardView(game: game, event: event)
-                            .padding(.bottom, 16)
+                        Spacer()
                     }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -494,6 +533,7 @@ struct GameView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear {
+            game.autoBattle = autoBattle
             if let summary = game.handleForeground() {
                 offlineSummary = summary
             }
@@ -524,6 +564,11 @@ struct GameView: View {
             game.onHeroHeal = { amt in
                 combatScene.showHeroHeal(amt)
                 combatScene.playHeroHeal()
+            }
+            game.onHeroDodge   = { combatScene.showDodge() }
+            game.onEnemyWindup = {
+                combatScene.showTelegraph()
+                Haptics.notify(.warning)
             }
 
             game.onMonsterSpawn  = { enemy in combatScene.updateEnemy(enemy); combatScene.playEnemyIdle() }
@@ -585,6 +630,9 @@ struct GameView: View {
             }
             combatScene.playHeroIdle()
         }
+        .onChange(of: autoBattle) { _, newValue in
+            game.autoBattle = newValue   // keep the model's live flag in sync with the toggle
+        }
         .onChange(of: game.currentFloor) { _, _ in
             isFading = true
             withAnimation(.easeOut(duration: 0.45)) { spriteOpacity = 0 }
@@ -598,21 +646,18 @@ struct GameView: View {
                 isFading = false
             }
         }
-        .onChange(of: game.isGameOver) { _, isOver in
-            guard isOver else { return }
-            if game.autoRestartEnabled {
-                Task {
-                    try? await Task.sleep(for: .seconds(1.2))
-                    game.restart()
-                    combatScene.playHeroIdle()
-                    combatScene.playEnemyIdle()
-                }
-            }
-        }
+        // Foreground death always shows the revive/restart overlay now — even with
+        // Undying Will — so the Second Wind ad and the at-risk gold aren't skipped.
+        // Auto-restart applies only to offline farming (see simulateOffline).
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(game.tickInterval))
-                if !isFading {
+                // Combat ticks only on the battle screen with nothing blocking:
+                // paused during transitions, the rest decision, and whenever a
+                // menu/sheet is open so the player has time to manage. In manual
+                // mode the tick only handles regen/spawn; taps drive the fight.
+                let menuOpen = selectedTab != .battle || showStore || showSettings
+                if !isFading && !game.pendingRestSite && !menuOpen {
                     game.tick()
                 }
             }
@@ -623,8 +668,9 @@ struct GameView: View {
     private var isAnyFullScreenOverlayActive: Bool {
         game.pendingBossVictory != nil ||
         game.pendingZoneUnlock != nil ||
-        (game.isGameOver && !game.autoRestartEnabled) ||
+        game.isGameOver ||
         offlineSummary != nil ||
+        game.pendingRestSite ||
         game.pendingFloorEvent != nil
     }
 
@@ -788,6 +834,7 @@ struct OfflineSummaryView: View {
 // MARK: - Game Over Overlay
 
 struct GameOverOverlay: View {
+    let game: DungeonGame
     let adManager: AdManager
     let onRevive: () -> Void
     let onRestart: () -> Void
@@ -801,16 +848,30 @@ struct GameOverOverlay: View {
                     .font(.system(size: 28, weight: .bold, design: .monospaced))
                     .foregroundStyle(Color(red: 1.0, green: 0.38, blue: 0.38))
 
-                Text("Your run is over.\nGold, upgrades, and shards carry over.")
-                    .font(.system(size: 14, design: .monospaced))
-                    .foregroundStyle(Color.white.opacity(0.75))
-                    .multilineTextAlignment(.center)
+                if game.atRiskGold > 0 {
+                    // Surface the pot the player is about to lose — this is what
+                    // makes the "second wind" revive ad genuinely tempting.
+                    VStack(spacing: 6) {
+                        Text("\(game.atRiskGold)g  +  ×\(String(format: "%.1f", game.greedMultiplier)) greed")
+                            .font(.system(size: 18, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color(red: 1.0, green: 0.72, blue: 0.40))
+                        Text("at risk — revive to keep it, or restart and lose it.")
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.60))
+                            .multilineTextAlignment(.center)
+                    }
+                } else {
+                    Text("Your run is over.\nBanked gold, upgrades, and shards carry over.")
+                        .font(.system(size: 14, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.75))
+                        .multilineTextAlignment(.center)
+                }
 
                 if StoreManager.shared.hasPurchasedRemoveAds {
                     Button(action: onRevive) {
                         HStack(spacing: 8) {
                             Image(systemName: "heart.fill")
-                            Text("REVIVE AT FULL HP")
+                            Text("SECOND WIND — REVIVE")
                         }
                         .font(.system(size: 14, weight: .semibold, design: .monospaced))
                         .padding(.horizontal, 24)
@@ -832,7 +893,7 @@ struct GameOverOverlay: View {
                                     .tint(Color.white.opacity(0.50))
                                     .scaleEffect(0.8)
                             }
-                            Text(adManager.isReviveAdReady ? "WATCH AD — REVIVE AT FULL HP" : "LOADING AD...")
+                            Text(adManager.isReviveAdReady ? "WATCH AD — SECOND WIND" : "LOADING AD...")
                         }
                         .font(.system(size: 14, weight: .semibold, design: .monospaced))
                         .padding(.horizontal, 24)
@@ -1105,6 +1166,7 @@ struct BattleTabView: View {
     let game: DungeonGame
     let combatScene: CombatScene
     let spriteOpacity: Double
+    let autoBattle: Bool
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -1116,12 +1178,294 @@ struct BattleTabView: View {
                 .frame(maxWidth: .infinity)
                 .opacity(spriteOpacity)
             CombatStatusView(game: game)
-            MapView(game: game)
+            // Run buffs + consumables sit up here with the status, kept out of the
+            // bottom tap zone so a stray strike can't open a blessing or burn a vial.
             ActiveEffectsBarView(game: game)
             ConsumablesBarView(game: game)
-            Spacer()
+            DescentBarView(game: game, onRest: { game.rest() })
+            MapView(game: game)
+            AbilityButtonView(game: game)
+            // The strike pad owns the bottom thumb zone, kept clear of anything
+            // tappable so rapid taps can't trigger an ad or a mis-tap.
+            StrikePadView(game: game, combatScene: combatScene, autoBattle: autoBattle)
         }
         .background(Color(red: 0.07, green: 0.07, blue: 0.11))
+    }
+}
+
+// MARK: - Ability Button (Phase 2 active ability)
+
+/// The class's signature ability, shown just above the strike pad so it's in
+/// the same thumb zone. Lights up when ready; shows a live countdown + a
+/// filling bar while cooling down. Tapping fires `activateAbility()`, and the
+/// existing combat-scene callbacks (attack / heal / block) animate the result.
+struct AbilityButtonView: View {
+    let game: DungeonGame
+
+    var body: some View {
+        let ability = game.ability
+        let ready   = game.canUseAbility
+        let cd      = game.abilityCooldownRemaining
+        let frac    = ability.cooldown > 0 ? 1 - min(1, cd / ability.cooldown) : 1
+        let accent  = Color(red: 1.0, green: 0.55, blue: 0.25)
+
+        Button {
+            game.activateAbility()
+            Haptics.impact(.medium)
+        } label: {
+            VStack(spacing: 6) {
+                HStack(spacing: 10) {
+                    ZStack {
+                        Image(systemName: ability.icon)
+                            .font(.system(size: 20))
+                            .foregroundStyle(ready ? accent : Color.white.opacity(0.30))
+                        if !ready {
+                            Text("\(Int(ceil(cd)))")
+                                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                                .foregroundStyle(.white)
+                                .monospacedDigit()
+                        }
+                    }
+                    .frame(width: 30)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(ability.name.uppercased())
+                            .font(.system(size: 13, weight: .bold, design: .monospaced))
+                            .foregroundStyle(ready ? .white : Color.white.opacity(0.50))
+                        Text(ready ? ability.blurb : "Cooling down…")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.45))
+                    }
+                    Spacer()
+                    if ready {
+                        Text("USE")
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundStyle(accent)
+                    }
+                }
+
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 2).fill(Color(white: 0.16)).frame(height: 4)
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(ready ? accent : Color(red: 0.5, green: 0.4, blue: 0.25))
+                            .frame(width: max(0, geo.size.width * frac), height: 4)
+                    }
+                }
+                .frame(height: 4)
+                .animation(.easeOut(duration: 0.2), value: frac)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(ready ? Color(red: 0.16, green: 0.11, blue: 0.07) : Color.white.opacity(0.03))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(ready ? accent.opacity(0.5) : Color.white.opacity(0.08), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!ready)
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+    }
+}
+
+// MARK: - Strike Pad (bottom-of-screen tap zone)
+
+/// The primary tap target for active combat. It sits at the bottom of the
+/// battle screen — the thumb's natural resting zone — instead of on the enemy
+/// sprite up top, which forced an awkward reach/grip. Each tap is an extra hero
+/// strike (no enemy retaliation), echoed by a squash-pop on the enemy + a haptic.
+struct StrikePadView: View {
+    let game: DungeonGame
+    let combatScene: CombatScene
+    let autoBattle: Bool
+    @State private var pressed = false
+
+    var body: some View {
+        if autoBattle {
+            // Auto-battle is driving the fight — the pad just shows status.
+            pad(icon: "play.circle.fill", label: "AUTO-BATTLING",
+                tint:   Color(red: 0.40, green: 0.95, blue: 0.55),
+                fill:   Color(red: 0.06, green: 0.16, blue: 0.10),
+                stroke: Color(red: 0.30, green: 0.70, blue: 0.40).opacity(0.5),
+                enabled: false) { }
+        } else if game.incomingHeavy {
+            // A heavy is incoming — choose: dodge it (safe, no attack) or strike
+            // through (deal damage but take the hit). Both are intended actions,
+            // so an over-tap just picks one — it never triggers an ad or a miss.
+            HStack(spacing: 10) {
+                choice(icon: "figure.run", label: "DODGE",
+                       tint: Color(red: 0.45, green: 0.85, blue: 1.0),
+                       fill: Color(red: 0.07, green: 0.16, blue: 0.24)) {
+                           game.playerDodge()
+                           Haptics.impact(.medium)
+                       }
+                choice(icon: "bolt.fill", label: "STRIKE!",
+                       tint: Color(red: 1.0, green: 0.45, blue: 0.30),
+                       fill: Color(red: 0.26, green: 0.09, blue: 0.07)) {
+                           game.playerStrike()
+                           combatScene.tapFeedback()
+                           Haptics.impact(.heavy)
+                       }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(minHeight: 120)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        } else {
+            let active = game.canTap
+            pad(icon: "hand.tap.fill", label: active ? "TAP TO STRIKE" : "…",
+                tint:   active ? Color(red: 1.0, green: 0.45, blue: 0.35) : Color.white.opacity(0.22),
+                fill:   active ? Color(red: 0.16, green: 0.10, blue: 0.10) : Color.white.opacity(0.03),
+                stroke: active ? Color(red: 0.85, green: 0.30, blue: 0.25).opacity(0.45) : Color.white.opacity(0.07),
+                enabled: active) {
+                    guard game.canTap else { return }
+                    game.playerStrike()
+                    combatScene.tapFeedback()
+                    Haptics.impact(.light)
+                    pop()
+                }
+        }
+    }
+
+    // A quick squash on the icon so the tap feels responsive under the thumb.
+    private func pop() {
+        pressed = true
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.5)) { pressed = false }
+    }
+
+    // Single full-width pad (normal strike, or the auto-battle status readout).
+    private func pad(icon: String, label: String, tint: Color, fill: Color, stroke: Color,
+                     enabled: Bool, action: @escaping () -> Void) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(fill)
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(stroke, lineWidth: 1))
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 32))
+                    .foregroundStyle(tint)
+                    .scaleEffect(pressed ? 0.82 : 1.0)
+                Text(label)
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .foregroundStyle(tint)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(minHeight: 120)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+        .onTapGesture { if enabled { action() } }
+    }
+
+    // One of the two heavy-attack choice buttons (dodge / strike-through).
+    private func choice(icon: String, label: String, tint: Color, fill: Color,
+                        action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: icon).font(.system(size: 26)).foregroundStyle(tint)
+                Text(label).font(.system(size: 13, weight: .bold, design: .monospaced)).foregroundStyle(tint)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 16).fill(fill)
+                    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(tint.opacity(0.5), lineWidth: 1))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Descent Bar (push-your-luck status)
+
+struct DescentBarView: View {
+    let game: DungeonGame
+    var onRest: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Greed meter — the tension number, rising each floor without a rest.
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 0) {
+                    Text("🔥 GREED")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color(red: 0.95, green: 0.45, blue: 0.25))
+                    Spacer()
+                    Text("×\(greedText)")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color(red: 1.0, green: 0.60, blue: 0.35))
+                        .monospacedDigit()
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color(white: 0.16))
+                            .frame(height: 6)
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color(red: 0.90, green: 0.40, blue: 0.20))
+                            .frame(width: max(0, geo.size.width * greedFraction), height: 6)
+                    }
+                }
+                .frame(height: 6)
+                .animation(.easeOut(duration: 0.2), value: greedFraction)
+            }
+
+            // At-risk gold — earned this descent, lost on death until banked.
+            VStack(alignment: .leading, spacing: 2) {
+                Text("AT RISK")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(red: 0.95, green: 0.62, blue: 0.30))
+                Text("\(game.atRiskGold)g")
+                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Color(red: 1.0, green: 0.72, blue: 0.40))
+                    .monospacedDigit()
+            }
+            .frame(minWidth: 60, alignment: .leading)
+
+            // Voluntary rest — bank the pot, heal, reset greed. Always available
+            // so the player can cash out any time, not just at a rest site.
+            Button(action: onRest) {
+                VStack(spacing: 1) {
+                    Image(systemName: "tent.fill")
+                        .font(.system(size: 13))
+                    Text("REST")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                }
+                .foregroundStyle(restEnabled ? Color(red: 0.4, green: 0.95, blue: 0.55) : Color.white.opacity(0.25))
+                .frame(width: 52, height: 40)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(restEnabled ? Color(red: 0.05, green: 0.18, blue: 0.08) : Color.white.opacity(0.04))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .strokeBorder(restEnabled ? Color(red: 0.25, green: 0.65, blue: 0.3) : Color.white.opacity(0.10),
+                                              lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(!restEnabled)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
+    private var greedText: String { String(format: "%.1f", game.greedMultiplier) }
+
+    private var greedFraction: Double {
+        let span = DungeonGame.greedCap - 1.0
+        guard span > 0 else { return 0 }
+        return min(1.0, max(0, (game.greedMultiplier - 1.0) / span))
+    }
+
+    // Nothing to gain from resting at full HP with an empty pot, so dim it then.
+    private var restEnabled: Bool {
+        !game.isGameOver && (game.atRiskGold > 0 || game.heroHp < game.heroMaxHp)
     }
 }
 
@@ -1399,6 +1743,160 @@ struct FloorEventCardView: View {
     }
 }
 
+// MARK: - Rest Site (push-your-luck decision)
+
+struct RestSiteCardView: View {
+    let game: DungeonGame
+    let adManager: AdManager
+    @State private var didDouble = false
+
+    private let accentRest    = Color(red: 0.30, green: 0.85, blue: 0.45)
+    private let accentDescend = Color(red: 0.95, green: 0.45, blue: 0.25)
+    private let accentCamp    = Color(red: 0.45, green: 0.80, blue: 0.95)
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Text("⛺")
+                    .font(.system(size: 32))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("REST SITE")
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(accentCamp)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(accentCamp.opacity(0.15)))
+                    Text("Push your luck?")
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.white)
+                }
+                Spacer()
+            }
+
+            // The gamble at a glance — the overlay hides the status bar, so show
+            // it here: banked is safe, at-risk is what death takes, greed is the
+            // multiplier you'd forfeit by resting.
+            HStack(spacing: 0) {
+                rsStat("BANKED", "\(game.gold)g", accentRest)
+                rsDivider()
+                rsStat("AT RISK", "\(game.atRiskGold)g", Color(red: 1.0, green: 0.72, blue: 0.40))
+                rsDivider()
+                rsStat("GREED", "×\(String(format: "%.1f", game.greedMultiplier))", accentDescend)
+            }
+            .padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.black.opacity(0.25)))
+
+            Text("Bank it and heal up, or push deeper for richer floors?")
+                .font(.system(size: 12, design: .monospaced).italic())
+                .foregroundStyle(Color.white.opacity(0.55))
+                .fixedSize(horizontal: false, vertical: true)
+
+            // Optional rewarded bonus: double the at-risk pot before deciding.
+            // Opt-in only; Remove Ads buyers simply don't see this ad button.
+            if game.atRiskGold > 0 && !StoreManager.shared.hasPurchasedRemoveAds {
+                if didDouble {
+                    Text("2× POT APPLIED — \(game.atRiskGold)g at risk")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color(red: 1.0, green: 0.82, blue: 0.30))
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Button {
+                        adManager.showBonusAd {
+                            game.atRiskGold *= 2
+                            didDouble = true
+                        }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: adManager.isBonusAdReady ? "play.circle.fill" : "hourglass")
+                            Text(adManager.isBonusAdReady ? "WATCH AD — DOUBLE POT" : "LOADING AD…")
+                        }
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundStyle(adManager.isBonusAdReady ? Color(red: 1.0, green: 0.82, blue: 0.30) : Color.white.opacity(0.35))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color(red: 0.55, green: 0.42, blue: 0.08).opacity(adManager.isBonusAdReady ? 0.22 : 0.06))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .strokeBorder(Color(red: 0.95, green: 0.78, blue: 0.25).opacity(adManager.isBonusAdReady ? 0.5 : 0.15), lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!adManager.isBonusAdReady)
+                }
+            }
+
+            Divider()
+                .background(Color.white.opacity(0.10))
+
+            HStack(spacing: 10) {
+                choiceButton(label: "DESCEND",
+                             summary: "Greed climbs, danger rises",
+                             accent: accentDescend) { game.descendPastRestSite() }
+
+                choiceButton(label: "REST & BANK",
+                             summary: "Bank \(game.atRiskGold)g, heal full",
+                             accent: accentRest) { game.rest() }
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(red: 0.10, green: 0.10, blue: 0.16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14)
+                        .strokeBorder(accentCamp.opacity(0.6), lineWidth: 1.5)
+                )
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+
+    private func rsStat(_ label: String, _ value: String, _ color: Color) -> some View {
+        VStack(spacing: 3) {
+            Text(label)
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color.white.opacity(0.55))
+            Text(value)
+                .font(.system(size: 15, weight: .bold, design: .monospaced))
+                .foregroundStyle(color)
+                .monospacedDigit()
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func rsDivider() -> some View {
+        Rectangle().fill(Color.white.opacity(0.10)).frame(width: 1, height: 26)
+    }
+
+    private func choiceButton(label: String, summary: String, accent: Color, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Text(label)
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundStyle(accent)
+                Text(summary)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.45))
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(accent.opacity(0.12))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .strokeBorder(accent.opacity(0.4), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 // MARK: - Tab Navigation
 
 private enum GameTab { case battle, upgrades, prestige, items, quests }
@@ -1493,6 +1991,25 @@ struct UpgradesTabView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 10) {
+                // Spendable (banked) gold — the sheet covers the top status bar,
+                // so surface it here so the player can manage purchases.
+                HStack(spacing: 6) {
+                    Image(systemName: "dollarsign.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundStyle(Color(red: 0.95, green: 0.78, blue: 0.25))
+                    Text("\(game.gold)g")
+                        .font(.system(size: 18, weight: .bold, design: .monospaced))
+                        .foregroundStyle(Color(red: 1.0, green: 0.84, blue: 0.35))
+                        .monospacedDigit()
+                    Spacer()
+                    Text("available")
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color(white: 0.11)))
+
                 ForEach(game.upgrades) { upgrade in
                     let isLocked = upgrade.unlockFloor > 0 && game.deepestFloorEver < upgrade.unlockFloor
                     let unlockZone = DungeonGame.zones.first(where: { $0.minFloor == upgrade.unlockFloor })?.name
@@ -2342,6 +2859,48 @@ struct BossVictoryOverlay: View {
         }
         .transition(.opacity.combined(with: .scale(scale: 0.95)))
         .animation(.spring(response: 0.4), value: victory.stageLabel)
+    }
+}
+
+// MARK: - Blessing Banner
+
+/// Brief, non-blocking banner for an auto-applied free blessing. It slides in at
+/// the top and dismisses itself — it never pauses the fight the way a decision
+/// modal does, which is what keeps the tapping flow intact.
+struct BlessingBanner: View {
+    let template: FloorEventTemplate
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(template.icon)
+                .font(.system(size: 26))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("BLESSING")
+                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .foregroundStyle(Color(red: 0.40, green: 0.95, blue: 0.55))
+                Text(template.title)
+                    .font(.system(size: 15, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.white)
+                Text(template.primaryEffectSummary)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(Color.white.opacity(0.75))
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 14)
+                .fill(Color(red: 0.08, green: 0.13, blue: 0.10))
+                .overlay(RoundedRectangle(cornerRadius: 14)
+                    .strokeBorder(Color(red: 0.30, green: 0.70, blue: 0.40).opacity(0.55), lineWidth: 1.5))
+        )
+        .padding(.horizontal, 16)
+        .task {
+            try? await Task.sleep(for: .seconds(3))
+            onDismiss()
+        }
     }
 }
 

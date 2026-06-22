@@ -101,8 +101,8 @@ struct PrestigeUpgrade: Identifiable {
         case "veteran":      return "Start with Regen \(level)/s"
         case "cunning":      return "Upgrades cost -\(level * 10)%"
         case "hunger":       return "Prestige from floor \(max(1, 5 - level * 2))+"
-        case "speed":        return "Attack \(level * 6)% faster always"
-        case "autorestart":  return "Auto-restart on death"
+        case "speed":        return "Auto-battle & offline \(level * 6)% faster"
+        case "autorestart":  return "Keeps farming offline after a death"
         case "warchest":     return "Start each run with \(level * 50) gold"
         case "autosell":
             if level == 0 { return "Auto-sell Common drops" }
@@ -120,12 +120,64 @@ class DungeonGame {
     var heroDef: Int
     var heroRegen: Int
 
-    var gold: Int = 0
+    var gold: Int = 0   // banked, spendable gold — safe from death
     var currentFloor: Int = 1
     var deepestFloor: Int = 0
     var soulShards: Int = 0
     var deepestFloorEver: Int = 0
     var isGameOver: Bool = false
+
+    // MARK: - Push-your-luck state (the overhaul's core loop)
+    //
+    // greedMultiplier climbs every floor you clear without resting, multiplying
+    // gold earned and loot rarity — the "should I push one more floor?" temptation.
+    // It snaps back to 1.0 whenever a run resets (restart, prestige) or the
+    // player rests at a camp.
+    var greedMultiplier: Double = 1.0
+    static let greedPerFloor = 0.1   // how much greed grows per floor cleared
+    static let greedCap      = 5.0   // ceiling so it can't run away
+
+    // Gold earned during the current descent. It is NOT spendable until banked
+    // at a rest site — that's the gamble. Die and you lose it; banked `gold`
+    // and all long-term progress (shards, gear, prestige) survive.
+    var atRiskGold: Int = 0
+
+    // Set true when the player reaches a rest site (after every boss). It pauses
+    // combat and presents the Descend / Rest decision.
+    var pendingRestSite: Bool = false
+
+    // Auto-battle: when on, the game loop takes a turn for the player each tick
+    // (hands-off grinding). Mirrored from the UI's @AppStorage toggle so the
+    // long-lived game-loop task always reads a LIVE value — reading the view's
+    // @AppStorage directly from that task can capture a stale snapshot.
+    var autoBattle: Bool = false
+
+    // MARK: - Active ability state (Phase 2)
+    //
+    // The cooldown counts down in real seconds while the game ticks. Guard is a
+    // brief window of reduced incoming damage (the Knight's Shield Wall).
+    var abilityCooldownRemaining: Double = 0
+    private var guardSecondsRemaining: Double = 0
+    private var guardReduction: Double = 0
+
+    var ability: Ability { character.signatureAbility }
+    var canUseAbility: Bool { abilityCooldownRemaining <= 0 && !isGameOver && !pendingRestSite }
+    var isGuardActive: Bool { guardSecondsRemaining > 0 }
+
+    // MARK: - Enemy heavy attacks / dodge (Phase 2b)
+    //
+    // Some enemy attacks are "heavy": the enemy spends a couple of ticks winding
+    // up (telegraphed) before the blow lands. If the player taps to dodge during
+    // that window the hit is negated; otherwise it lands for heavyAttackMultiplier×
+    // damage. This adds reactive skill to incoming damage, not just outgoing taps.
+    // The enemy is winding up a heavy attack. Turn-based: it deals no damage
+    // until the player's next action resolves it (dodge to negate, or strike
+    // through to attack and take the hit).
+    private(set) var incomingHeavy: Bool = false
+
+    static let heavyChanceNormal     = 0.18   // chance the enemy's turn is a heavy
+    static let heavyChanceBoss       = 0.35   // bosses telegraph more often
+    static let heavyAttackMultiplier = 2.0    // heavy damage vs a normal hit
 
     private(set) var characterID: String
     var character: CharacterClass {
@@ -178,8 +230,8 @@ class DungeonGame {
         PrestigeUpgrade(id: "veteran",      name: "Veteran's Blood",   detail: "Start each run with base regen",          shardCost: 12, maxLevel: 3),
         PrestigeUpgrade(id: "cunning",      name: "Cunning Mind",      detail: "Reduce upgrade gold costs per level",     shardCost: 12, maxLevel: 3),
         PrestigeUpgrade(id: "hunger",       name: "Endless Hunger",    detail: "Lower prestige floor requirement",        shardCost: 20, maxLevel: 2),
-        PrestigeUpgrade(id: "speed",        name: "Battle Hardened",   detail: "Permanently faster attack speed",         shardCost: 12, maxLevel: 3),
-        PrestigeUpgrade(id: "autorestart",  name: "Undying Will",      detail: "Automatically restart on death",          shardCost: 30, maxLevel: 1),
+        PrestigeUpgrade(id: "speed",        name: "Battle Hardened",   detail: "Faster auto-battle & offline speed",         shardCost: 12, maxLevel: 3),
+        PrestigeUpgrade(id: "autorestart",  name: "Undying Will",      detail: "Keep farming offline after a death",          shardCost: 30, maxLevel: 1),
         PrestigeUpgrade(id: "autosell",     name: "Merchant's Eye",    detail: "Auto-sell drops below a rarity threshold", shardCost: 12, maxLevel: 3),
     ]
 
@@ -191,6 +243,9 @@ class DungeonGame {
     var pendingDrop: Equipment? = nil
     var pendingBossVictory: BossVictory? = nil
     var pendingFloorEvent: FloorEvent? = nil
+    // A free blessing that auto-applied — shown as a brief, non-blocking banner
+    // (no decision needed, so it never pauses the fight like a modal does).
+    var pendingBlessing: FloorEventTemplate? = nil
     var activeEffects: [ActiveEffect] = []
     var usableItems: [UsableItem] = []
     static let usableItemLimit = 3
@@ -211,6 +266,8 @@ class DungeonGame {
     var onHeroBlock:  (() -> Void)?
     var onHeroCrit:   ((Int) -> Void)?
     var onHeroHeal:   ((Int) -> Void)?
+    var onHeroDodge:   (() -> Void)?
+    var onEnemyWindup: (() -> Void)?
 
     var onMonsterSpawn:  ((EnemyType) -> Void)?
     var onMonsterHurt:   (() -> Void)?
@@ -271,6 +328,17 @@ class DungeonGame {
         let runLvl      = upgrades.first(where: { $0.id == "goldmult" })?.level ?? 0
         let prestigeLvl = prestigeUpgrades.first(where: { $0.id == "goldrush" })?.level ?? 0
         return 1.0 + Double(runLvl) * 0.10 + Double(prestigeLvl) * 0.15
+    }
+
+    // Gold awarded for slaying the enemy on a given floor. This formula used to
+    // be written out in two places — live combat and the offline simulation —
+    // which is exactly the kind of duplication that drifts. Centralizing it
+    // here means the greed multiplier (Phase 1b) gets multiplied in ONCE and
+    // both the live game and offline progress pick it up automatically.
+    static let bossGoldBonus = 3.0
+    func goldReward(floor: Int, isBoss: Bool) -> Int {
+        let bossBonus = isBoss ? DungeonGame.bossGoldBonus : 1.0
+        return Int(Double(floor + Int.random(in: 1...3)) * goldMultiplier * bossBonus * greedMultiplier)
     }
 
     var prestigeThreshold: Int {
@@ -345,6 +413,10 @@ class DungeonGame {
     func tick() {
         guard !isGameOver else { return }
 
+        // Ability cooldown and the Shield Wall window count down in real time.
+        if abilityCooldownRemaining > 0 { abilityCooldownRemaining = max(0, abilityCooldownRemaining - tickInterval) }
+        if guardSecondsRemaining  > 0 { guardSecondsRemaining  = max(0, guardSecondsRemaining  - tickInterval) }
+
         if heroHp <= 0 {
             if let idx = usableItems.firstIndex(where: { $0.kind == .revive }) {
                 usableItems.remove(at: idx)
@@ -364,7 +436,9 @@ class DungeonGame {
         }
 
         if inCombat {
-            doCombatTick()
+            // Turn-based: manual combat waits for the player's tap. Auto-battle
+            // takes one full turn each tick for hands-off grinding.
+            if autoBattle { autoTurn() }
         } else {
             if heroRegen > 0 && heroHp < heroMaxHp {
                 heroHp = min(heroMaxHp, heroHp + heroRegen)
@@ -378,6 +452,12 @@ class DungeonGame {
         stripActiveEffects()
         usableItems         = []
         pendingFloorEvent   = nil
+        atRiskGold          = 0      // at-risk gold is forfeited when you give up the run
+        greedMultiplier     = 1.0
+        pendingRestSite     = false
+        abilityCooldownRemaining = 0
+        guardSecondsRemaining    = 0
+        incomingHeavy            = false
         heroHp              = heroMaxHp
         currentFloor        = 1
         currentFightFloor   = 0
@@ -393,9 +473,30 @@ class DungeonGame {
         checkAndRefreshDailyQuests()
     }
 
+    // MARK: - Rest sites (push-your-luck banking)
+
+    /// Make camp: bank the at-risk gold (now safe + spendable), heal to full,
+    /// and reset greed to 1.0. Safety costs you the greed you'd built up.
+    func rest() {
+        gold += atRiskGold
+        atRiskGold = 0
+        greedMultiplier = 1.0
+        heroHp = heroMaxHp
+        pendingRestSite = false
+        log("⛺ You make camp — gold banked, wounds healed, greed reset.")
+    }
+
+    /// Decline the rest site and push deeper. Greed keeps climbing, and so do
+    /// the stakes — your at-risk pot rides on surviving to the next camp.
+    func descendPastRestSite() {
+        pendingRestSite = false
+        log("You press deeper into the dark...")
+    }
+
     private func spawnMonster() {
         let f      = currentFloor
         currentFightFloor = f
+        incomingHeavy = false   // a fresh enemy starts clean, not mid-telegraph
         let isBoss = DungeonGame.isBoss(floor: f)
 
         let enemy: EnemyType
@@ -408,9 +509,9 @@ class DungeonGame {
 
         currentEnemyType = enemy
         monsterName      = enemy.name
-        monsterMaxHp     = isBoss ? Int(Double(enemy.hp(floor: f)) * 2.5) : enemy.hp(floor: f)
+        monsterMaxHp     = enemy.scaledHp(floor: f, isBoss: isBoss)
         monsterHp        = monsterMaxHp
-        monsterAtk       = isBoss ? Int(Double(enemy.atk(floor: f)) * 1.5) : enemy.atk(floor: f)
+        monsterAtk       = enemy.scaledAtk(floor: f, isBoss: isBoss)
         inCombat         = true
         displayMonsterHp    = monsterHp
         displayMonsterMaxHp = monsterMaxHp
@@ -423,7 +524,11 @@ class DungeonGame {
         }
     }
 
-    private func doCombatTick() {
+    /// One hero attack on the current enemy: crit roll, damage, and the
+    /// consequences — a kill (gold into the at-risk pot, floor advance, drops)
+    /// or a survivor (hit feedback). Does NOT include the enemy's counter-attack;
+    /// that lives in enemyRetaliate(). Called by both the auto-tick and a tap.
+    private func heroStrike() {
         onHeroAttack?()
 
         let isCrit  = Double.random(in: 0...1) < heroCritChance
@@ -433,16 +538,20 @@ class DungeonGame {
         if monsterHp <= 0 {
             let killedOnFloor = currentFloor
             let isBossKill    = DungeonGame.isBoss(floor: killedOnFloor)
-            let bossBonus     = isBossKill ? 3.0 : 1.0
-            let earned = Int(Double(killedOnFloor + Int.random(in: 1...3)) * goldMultiplier * bossBonus)
-            gold += earned
+            let earned = goldReward(floor: killedOnFloor, isBoss: isBossKill)
+            atRiskGold += earned   // earnings join the at-risk pot, not banked gold
             inCombat        = false
             ticksUntilFight = 2
+            incomingHeavy = false   // killing the enemy cancels any wind-up
 
             let prevDeepest = deepestFloorEver
             currentFloor   += 1
             deepestFloorEver = max(deepestFloorEver, currentFloor)
-            checkForFloorEvent()
+            // Push-your-luck: every floor cleared without resting cranks greed up.
+            greedMultiplier = min(DungeonGame.greedCap, greedMultiplier + DungeonGame.greedPerFloor)
+            // Boss floors hand out a rest-site decision (below) instead of a
+            // random floor event, so only roll an event on non-boss floors.
+            if !isBossKill { checkForFloorEvent() }
             if currentFloor > deepestFloor {
                 deepestFloor = currentFloor
                 if deepestFloor > 1 && deepestFloor % 5 == 0 {
@@ -498,12 +607,14 @@ class DungeonGame {
                 log(isCrit
                     ? "⚡ CRITICAL BLOW! BOSS DEFEATED! +\(earned)g  |  Stage -> \(DungeonGame.stageLabel(floor: currentFloor))"
                     : "⚔ BOSS DEFEATED! +\(earned)g  |  Stage -> \(DungeonGame.stageLabel(floor: currentFloor))")
-                if let drop = EquipmentDrop.rollBoss(floor: killedOnFloor) { receiveDrop(drop) }
+                // Reaching a boss clears a rest site — pause for the Descend / Rest choice.
+                pendingRestSite = true
+                if let drop = EquipmentDrop.rollBoss(floor: killedOnFloor, luck: greedMultiplier) { receiveDrop(drop) }
             } else {
                 log(isCrit
                     ? "⚡ CRIT! \(monsterName) slain! +\(earned)g  |  Stage -> \(DungeonGame.stageLabel(floor: currentFloor))"
                     : "\(monsterName) slain! +\(earned)g  |  Stage -> \(DungeonGame.stageLabel(floor: currentFloor))")
-                if let drop = EquipmentDrop.roll(floor: killedOnFloor) { receiveDrop(drop) }
+                if let drop = EquipmentDrop.roll(floor: killedOnFloor, luck: greedMultiplier) { receiveDrop(drop) }
             }
         } else {
             onMonsterHurt?()
@@ -515,19 +626,116 @@ class DungeonGame {
                 log("You strike \(monsterName) for \(heroDmg). [\(monsterHp)/\(monsterMaxHp) hp]")
             }
 
-            // Knight/Paladin block passive
-            let isBlocked = character.blockChance > 0 && Double.random(in: 0...1) < character.blockChance
-            if isBlocked {
-                onHeroBlock?()
-                log("\(character.name) blocks the attack!")
-            } else {
-                let dmg = max(1, monsterAtk - heroDef)
-                heroHp = max(0, heroHp - dmg)
-                onMonsterAttack?()
-                onHeroHurt?()
-                onHeroDamageTaken?(dmg)
-                log("\(monsterName) hits \(dmg) — Hero \(heroHp)/\(heroMaxHp)hp")
+        }
+    }
+
+    /// The enemy's counter-attack. Called ONLY by the auto-tick — never by a
+    /// player tap, so tapping deals damage with zero added risk.
+    private func enemyRetaliate() {
+        // Knight / Templar block passive — a chance to negate the hit entirely.
+        let isBlocked = character.blockChance > 0 && Double.random(in: 0...1) < character.blockChance
+        if isBlocked {
+            onHeroBlock?()
+            log("\(character.name) blocks the attack!")
+        } else {
+            var dmg = max(1, monsterAtk - heroDef)
+            // Shield Wall (and any future guard effect) softens the blow.
+            if guardSecondsRemaining > 0 { dmg = max(1, Int(Double(dmg) * (1 - guardReduction))) }
+            heroHp = max(0, heroHp - dmg)
+            onMonsterAttack?()
+            onHeroHurt?()
+            onHeroDamageTaken?(dmg)
+            log("\(monsterName) hits \(dmg) — Hero \(heroHp)/\(heroMaxHp)hp")
+        }
+    }
+
+    /// The enemy's turn, taken right after the hero's (turn-based). Usually a
+    /// normal hit, but sometimes it winds up a heavy: that deals no damage now —
+    /// it sets `incomingHeavy`, and the player's next action resolves it.
+    private func enemyTurn() {
+        guard !incomingHeavy else { return }   // already winding up; waits for the player
+        let heavyChance = DungeonGame.isBoss(floor: currentFightFloor)
+            ? DungeonGame.heavyChanceBoss : DungeonGame.heavyChanceNormal
+        if Double.random(in: 0...1) < heavyChance {
+            incomingHeavy = true
+            onEnemyWindup?()
+            log("⚠️ \(monsterName) winds up a heavy attack — dodge or strike through!")
+        } else {
+            enemyRetaliate()
+        }
+    }
+
+    /// The wound-up heavy landing on the hero (heavyAttackMultiplier× a normal hit).
+    private func resolveHeavyHit() {
+        var dmg = max(1, Int(Double(monsterAtk) * DungeonGame.heavyAttackMultiplier) - heroDef)
+        if guardSecondsRemaining > 0 { dmg = max(1, Int(Double(dmg) * (1 - guardReduction))) }
+        heroHp = max(0, heroHp - dmg)
+        onMonsterAttack?()
+        onHeroHurt?()
+        onHeroDamageTaken?(dmg)
+        log("💥 HEAVY HIT! \(monsterName) crushes you for \(dmg)!")
+    }
+
+    /// One automated turn for Auto-battle: dodge a telegraphed heavy, else strike.
+    /// Mirrors what an attentive player would tap.
+    private func autoTurn() {
+        if incomingHeavy { playerDodge() } else { playerStrike() }
+    }
+
+    /// Whether the player can act right now (gates the pad + its tap juice).
+    var canTap: Bool { inCombat && !isGameOver && !pendingRestSite }
+
+    /// The player's turn: the hero strikes, then — turn-based — the enemy
+    /// responds (a normal hit or a heavy wind-up). If the enemy is mid-wind-up,
+    /// this is the "strike through" choice: attack but eat the heavy, unless
+    /// your blow kills it first.
+    func playerStrike() {
+        guard canTap else { return }
+        if incomingHeavy {
+            heroStrike()
+            if inCombat { resolveHeavyHit() }
+            incomingHeavy = false
+            return
+        }
+        heroStrike()
+        if inCombat { enemyTurn() }
+    }
+
+    /// The player's turn spent dodging a telegraphed heavy: it's negated and the
+    /// hero doesn't attack. Safe, but it costs you a turn of offense.
+    func playerDodge() {
+        guard incomingHeavy, !isGameOver, !pendingRestSite else { return }
+        incomingHeavy = false
+        onHeroDodge?()
+        log("💨 You dodge the heavy blow!")
+    }
+
+    /// Fire the current class's signature ability, if it's off cooldown.
+    func activateAbility() {
+        guard canUseAbility else { return }
+        let a = character.signatureAbility
+        // Don't waste a damage burst when there's no enemy in front of you.
+        if case .burst = a.effect, !inCombat { return }
+        abilityCooldownRemaining = a.cooldown
+        switch a.effect {
+        case .burst(let hits):
+            log("⚔️ \(a.name)!")
+            // Reuse the normal strike path — each hit can crit and any can land
+            // the kill. Guard on inCombat so it stops the instant the enemy drops.
+            for _ in 0..<hits where inCombat { heroStrike() }
+        case .heal(let fraction):
+            let target = max(1, Int(Double(heroMaxHp) * fraction))
+            let healed = min(target, heroMaxHp - heroHp)
+            if healed > 0 {
+                heroHp += healed
+                onHeroHeal?(healed)
             }
+            log("✨ \(a.name) — +\(healed) HP")
+        case .guardUp(let seconds, let reduction):
+            guardSecondsRemaining = seconds
+            guardReduction = reduction
+            onHeroBlock?()
+            log("🛡️ \(a.name) — incoming damage cut for \(Int(seconds))s")
         }
     }
 
@@ -616,6 +824,12 @@ class DungeonGame {
 
         activeEffects      = []
         pendingFloorEvent  = nil
+        atRiskGold         = 0
+        greedMultiplier    = 1.0
+        pendingRestSite    = false
+        abilityCooldownRemaining = 0
+        guardSecondsRemaining    = 0
+        incomingHeavy            = false
         currentFloor       = 1
         currentFightFloor  = 0
         deepestFloor       = 0
@@ -762,19 +976,27 @@ class DungeonGame {
 
     private func checkForFloorEvent() {
         guard pendingFloorEvent == nil,
+              pendingBlessing == nil,
               pendingBossVictory == nil,
               !DungeonGame.isBoss(floor: currentFloor),
               currentFloor > 1 else { return }
-        guard Double.random(in: 0...1) < 0.22 else { return }
-        // Reroll up to 10 times to find an event the player can afford
+        guard Double.random(in: 0...1) < 0.18 else { return }
+        // Reroll up to 10 times to find an event the player can afford.
         for _ in 0..<10 {
             let template = FloorEventTemplate.random()
-            if template.primaryGoldCost == 0 || gold >= template.primaryGoldCost {
+            guard template.primaryGoldCost == 0 || gold >= template.primaryGoldCost else { continue }
+            if template.category == .blessing {
+                // Free buffs apply instantly with a brief, non-blocking banner so
+                // they don't interrupt the tapping flow. Only real decisions
+                // (shrine / curse / mystery) pause the fight with a modal.
+                applyPrimaryEffect(template)
+                pendingBlessing = template
+            } else {
                 pendingFloorEvent = FloorEvent(template: template)
-                return
             }
+            return
         }
-        // All candidates were unaffordable — skip the event this floor
+        // All candidates were unaffordable — skip the event this floor.
     }
 
     func resolveFloorEvent(primary: Bool) {
@@ -943,6 +1165,7 @@ class DungeonGame {
     }
 
     func dismissDrop() { pendingDrop = nil }
+    func dismissBlessing() { pendingBlessing = nil }
     func dismissBossVictory() { pendingBossVictory = nil }
 
     func useItem(_ item: UsableItem) {
@@ -965,12 +1188,13 @@ class DungeonGame {
             return
         }
 
-        let slotEmpty = equippedItems[item.slot.rawValue] == nil
-        if slotEmpty {
-            equippedItems[item.slot.rawValue] = item
-            applyBonuses(of: item)
-            updateSetBonus()
-            log("⚔ Found & equipped \(item.rarity.label) \(item.name)! [\(item.statSummary)]")
+        let autoEquip = UserDefaults.standard.object(forKey: "com.oneMoreFloor.autoEquipEnabled") as? Bool ?? true
+        let equipped  = equippedItems[item.slot.rawValue]
+        // Always fill an empty slot; with auto-equip on, also swap in a drop that
+        // scores higher than what's worn. equip() moves the old piece to the
+        // inventory and reapplies stat + set bonuses for us.
+        if equipped == nil || (autoEquip && itemScore(item) > itemScore(equipped!)) {
+            equip(item: item)
         } else {
             addToInventory(item)
             log("⚔ Found \(item.rarity.label) \(item.name)! [\(item.statSummary)] — Check ITEMS tab.")
@@ -1193,6 +1417,9 @@ class DungeonGame {
         var retiredCharacterIDs: [String]?
         // v8 additions (optional for backwards compatibility)
         var totalPrestiges: Int?
+        // v9 additions (optional for backwards compatibility)
+        var greedMultiplier: Double?
+        var atRiskGold: Int?
     }
 
     private static let saveKey = "dungeonSave_v2"
@@ -1235,7 +1462,9 @@ class DungeonGame {
             dailyCompletionBonusClaimed: dailyCompletionBonusClaimed,
             usableItems: usableItems,
             retiredCharacterIDs: retiredCharacterIDs,
-            totalPrestiges: totalPrestiges
+            totalPrestiges: totalPrestiges,
+            greedMultiplier: greedMultiplier,
+            atRiskGold: atRiskGold
         )
         if let encoded = try? JSONEncoder().encode(data) {
             UserDefaults.standard.set(encoded, forKey: Self.saveKey)
@@ -1301,6 +1530,8 @@ class DungeonGame {
         pendingFloorEvent    = data.pendingFloorEvent
         retiredCharacterIDs  = data.retiredCharacterIDs  ?? []
         totalPrestiges       = data.totalPrestiges       ?? 0
+        greedMultiplier      = data.greedMultiplier      ?? 1.0
+        atRiskGold           = data.atRiskGold           ?? 0
 
         displayMonsterHp    = inCombat ? max(0, monsterHp) : 0
         displayMonsterMaxHp = inCombat ? monsterMaxHp : 0
@@ -1311,6 +1542,14 @@ class DungeonGame {
     }
 
     private func simulateOffline(seconds: TimeInterval) -> OfflineSummary {
+        // While away, the hero makes camp: bank at-risk gold and let greed settle
+        // back to 1.0. Offline never gambles, so it can't lose your gold to a
+        // death you didn't choose. Earnings below accrue straight to banked gold.
+        gold += atRiskGold
+        atRiskGold = 0
+        greedMultiplier = 1.0
+        pendingRestSite = false
+
         let offlineCap = UserDefaults.standard.bool(forKey: "com.oneMoreFloor.nightWatch") ? 24.0 * 3600 : 4.0 * 3600
         let elapsed    = min(seconds, offlineCap)
         let tickCount = min(Int(elapsed / tickInterval), 50_000)
@@ -1348,8 +1587,7 @@ class DungeonGame {
             } else if inCombat {
                 monsterHp -= max(1, heroAtk)
                 if monsterHp <= 0 {
-                    let bossBonus = DungeonGame.isBoss(floor: currentFloor) ? 3.0 : 1.0
-                    let earned = Int(Double(currentFloor + Int.random(in: 1...3)) * goldMultiplier * bossBonus)
+                    let earned = goldReward(floor: currentFloor, isBoss: DungeonGame.isBoss(floor: currentFloor))
                     gold += earned; goldEarned += earned
                     inCombat = false; ticksUntilFight = 2
                     currentFloor += 1; floorsCleared += 1
@@ -1373,9 +1611,9 @@ class DungeonGame {
                     }
                     currentEnemyType = enemy
                     monsterName  = enemy.name
-                    monsterMaxHp = isBoss ? Int(Double(enemy.hp(floor: currentFloor)) * 2.5) : enemy.hp(floor: currentFloor)
+                    monsterMaxHp = enemy.scaledHp(floor: currentFloor, isBoss: isBoss)
                     monsterHp    = monsterMaxHp
-                    monsterAtk   = isBoss ? Int(Double(enemy.atk(floor: currentFloor)) * 1.5) : enemy.atk(floor: currentFloor)
+                    monsterAtk   = enemy.scaledAtk(floor: currentFloor, isBoss: isBoss)
                     inCombat     = true
                 }
             }
@@ -1433,8 +1671,8 @@ class DungeonGame {
                     let pool   = DungeonGame.zoneEnemyPools[zoneID] ?? [.skeleton]
                     let enemy  = pool[0]
                     let isBoss = DungeonGame.isBoss(floor: floor)
-                    mHp  = isBoss ? Int(Double(enemy.hp(floor: floor))  * 2.5) : enemy.hp(floor: floor)
-                    mAtk = isBoss ? Int(Double(enemy.atk(floor: floor)) * 1.5) : enemy.atk(floor: floor)
+                    mHp  = enemy.scaledHp(floor: floor, isBoss: isBoss)
+                    mAtk = enemy.scaledAtk(floor: floor, isBoss: isBoss)
                     fighting = true
                 }
             }
