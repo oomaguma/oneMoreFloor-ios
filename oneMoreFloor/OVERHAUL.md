@@ -102,6 +102,8 @@ The smallest change that fixes the dead first session. Ship it, watch D1/D7 move
 
 **Fixes (2026-06-22):** the Auto toggle now actually drives combat — auto-battle state moved onto the `@Observable` model (`game.autoBattle`), mirrored from the toggle, because a long-lived `.task` was reading a stale `@AppStorage` snapshot. And foreground death always shows the revive/restart overlay now, even with Undying Will, so auto-restart no longer skips the Second Wind ad or silently dumps the at-risk pot.
 
+**Idle fallback (2026-06-22):** so leaving the battle screen up never just freezes, foreground combat auto-takes turns after `idleAutoThreshold` (3s) of no tap; a real tap snaps back to manual. (Chosen over defaulting the Auto toggle on, which would hide the manual combat.) `secondsSinceAction` lives on the model and is reset only by real taps in `playerStrike` / `playerDodge`; `autoTurn` calls the internal resolvers so it never resets the idle timer.
+
 ### Phase 3 — UI overhaul + onboarding + the App Store listing
 - Full visual polish pass on every screen.
 - A first-session tutorial that teaches tap + the push-your-luck choice in <60s.
