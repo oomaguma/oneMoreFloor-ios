@@ -40,6 +40,31 @@ struct CharacterClass: Identifiable {
     }
 }
 
+// MARK: - Active Ability
+//
+// Phase 2 gives every class one signature active ability on a cooldown — the
+// tactical layer on top of tapping. Each leans into the class's identity (the
+// Wizard nukes, the Priest heals, the Knight turtles), which is what finally
+// makes the eight classes *play* differently, not just start differently.
+
+enum AbilityEffect {
+    /// Fire N immediate hero strikes at the enemy. Reuses the normal strike
+    /// path, so each hit can crit and any of them can land the killing blow.
+    case burst(hits: Int)
+    /// Heal a fraction (0–1) of max HP.
+    case heal(fraction: Double)
+    /// Cut incoming damage by `reduction` (0–1) for a number of seconds.
+    case guardUp(seconds: Double, reduction: Double)
+}
+
+struct Ability {
+    let name: String
+    let icon: String       // SF Symbol name
+    let cooldown: Double    // seconds
+    let effect: AbilityEffect
+    let blurb: String       // one-line description for the UI
+}
+
 struct EnemyType: Identifiable {
     let id: String
     let name: String
@@ -67,6 +92,26 @@ struct EnemyType: Identifiable {
 
     func hp(floor: Int) -> Int { max(1, hpBase + floor * hpPerFloor) }
     func atk(floor: Int) -> Int { max(1, atkBase + floor * atkPerFloor) }
+
+    // MARK: Boss scaling
+    //
+    // A boss is just a normal enemy on a multiple-of-10 floor with its stats
+    // inflated. These two multipliers used to be written out by hand in three
+    // different places (live combat, the offline simulation, and the
+    // death-timing estimate). Keeping them here means a boss can never
+    // accidentally be "2.5x as tough" in one place and "3x" in another.
+    static let bossHpMultiplier  = 2.5
+    static let bossAtkMultiplier = 1.5
+
+    /// HP for this enemy on a given floor, already inflated if it's a boss fight.
+    func scaledHp(floor: Int, isBoss: Bool) -> Int {
+        isBoss ? Int(Double(hp(floor: floor)) * EnemyType.bossHpMultiplier) : hp(floor: floor)
+    }
+
+    /// ATK for this enemy on a given floor, already inflated if it's a boss fight.
+    func scaledAtk(floor: Int, isBoss: Bool) -> Int {
+        isBoss ? Int(Double(atk(floor: floor)) * EnemyType.bossAtkMultiplier) : atk(floor: floor)
+    }
 }
 
 // MARK: - Legacy Bonus
@@ -107,6 +152,22 @@ extension CharacterClass {
         case "wizard":        return LegacyBonus(hp: 0,  atk: 2, def: 0, regen: 0, critChance: 0.00)
         case "priest":        return LegacyBonus(hp: 20, atk: 0, def: 0, regen: 0, critChance: 0.00)
         default:              return LegacyBonus(hp: 0,  atk: 0, def: 0, regen: 0, critChance: 0.00)
+        }
+    }
+
+    /// The class's signature active ability (Phase 2). Numbers are first-draft
+    /// and meant to be tuned in playtest.
+    var signatureAbility: Ability {
+        switch id {
+        case "soldier":       return Ability(name: "Power Strike", icon: "burst.fill",             cooldown: 12, effect: .burst(hits: 3),                     blurb: "Unleash 3 rapid strikes")
+        case "knight":        return Ability(name: "Shield Wall",  icon: "shield.lefthalf.filled", cooldown: 18, effect: .guardUp(seconds: 5, reduction: 0.7), blurb: "Block 70% of damage for 5s")
+        case "knightTemplar": return Ability(name: "Lay on Hands", icon: "cross.fill",             cooldown: 16, effect: .heal(fraction: 0.40),               blurb: "Heal 40% of max HP")
+        case "swordsman":     return Ability(name: "Blade Flurry", icon: "wind",                   cooldown: 14, effect: .burst(hits: 5),                     blurb: "A flurry of 5 strikes")
+        case "lancer":        return Ability(name: "Impale",       icon: "arrow.up.forward",       cooldown: 13, effect: .burst(hits: 4),                     blurb: "A 4-hit reaching thrust")
+        case "archer":        return Ability(name: "Arrow Volley", icon: "arrow.up.and.down",      cooldown: 13, effect: .burst(hits: 4),                     blurb: "Rain down 4 arrows")
+        case "wizard":        return Ability(name: "Fireball",     icon: "flame.fill",             cooldown: 16, effect: .burst(hits: 6),                     blurb: "Incinerate for 6 hits")
+        case "priest":        return Ability(name: "Divine Light", icon: "sparkles",               cooldown: 15, effect: .heal(fraction: 0.50),               blurb: "Heal 50% of max HP")
+        default:              return Ability(name: "Power Strike", icon: "burst.fill",             cooldown: 12, effect: .burst(hits: 3),                     blurb: "Unleash 3 rapid strikes")
         }
     }
 

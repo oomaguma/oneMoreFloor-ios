@@ -8,24 +8,30 @@ final class AdManager {
 
     private(set) var isOfflineAdReady = false
     private(set) var isReviveAdReady  = false
+    private(set) var isBonusAdReady   = false
 
     private var offlineAd: RewardedAd?
     private var reviveAd:  RewardedAd?
+    private var bonusAd:   RewardedAd?
 
     // Google's test IDs are used in debug builds so ads always load during development.
     // Release builds use the real AdMob ad unit IDs.
     #if DEBUG
     private static let offlineAdUnitID = "ca-app-pub-3940256099942544/1712485313"
     private static let reviveAdUnitID  = "ca-app-pub-3940256099942544/1712485313"
+    private static let bonusAdUnitID   = "ca-app-pub-3940256099942544/1712485313"
     #else
     private static let offlineAdUnitID = "ca-app-pub-2071020921604740/4000392120"
     private static let reviveAdUnitID  = "ca-app-pub-2071020921604740/4054712530"
+    // Dedicated "double pot" rewarded unit.
+    private static let bonusAdUnitID   = "ca-app-pub-2071020921604740/1634625803"
     #endif
 
     init() {
         guard !UserDefaults.standard.bool(forKey: "com.oneMoreFloor.removeAds") else { return }
         Task { await loadOfflineAd() }
         Task { await loadReviveAd() }
+        Task { await loadBonusAd() }
     }
 
     private func loadOfflineAd() async {
@@ -62,6 +68,24 @@ final class AdManager {
         reviveAd = nil
         ad.present(from: vc, userDidEarnRewardHandler: onReward)
         Task { await loadReviveAd() }
+    }
+
+    private func loadBonusAd() async {
+        do {
+            bonusAd = try await RewardedAd.load(
+                with: Self.bonusAdUnitID, request: Request())
+            isBonusAdReady = true
+        } catch {
+            isBonusAdReady = false
+        }
+    }
+
+    func showBonusAd(onReward: @escaping () -> Void) {
+        guard let ad = bonusAd, let vc = rootViewController else { return }
+        isBonusAdReady = false
+        bonusAd = nil
+        ad.present(from: vc, userDidEarnRewardHandler: onReward)
+        Task { await loadBonusAd() }
     }
 
     private var rootViewController: UIViewController? {

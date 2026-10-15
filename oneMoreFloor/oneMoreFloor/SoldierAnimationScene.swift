@@ -3,9 +3,10 @@ import SpriteKit
 // Shared SKView used only to rasterize atlas-backed textures into plain textures,
 // which is required because SKTexture(rect:in:) gives wrong dimensions when
 // the source texture is backed by a compiled .atlasc file.
-private let _sheetBaker = SKView()
+// Internal (not private) so RaidScene.swift can share the same baker and helper.
+let _sheetBaker = SKView()
 
-private func buildFrames(_ spec: AnimationSpec) -> [SKTexture] {
+func buildFrames(_ spec: AnimationSpec) -> [SKTexture] {
     // Compiled .atlasc stores texture names with %20 for spaces; encode before lookup.
     let lookupName = spec.imageName.replacingOccurrences(of: " ", with: "%20")
     let raw = SKTexture(imageNamed: lookupName)
@@ -91,7 +92,7 @@ class CombatScene: SKScene {
     private var heroProjectileTexture:  SKTexture?
     private var enemyProjectileTexture: SKTexture?
 
-    private let heroClass: CharacterClass
+    private var heroClass: CharacterClass
     private var currentEnemy: EnemyType
 
     init(hero: CharacterClass, initialEnemy: EnemyType, initialZoneID: String = "entrance") {
@@ -170,6 +171,21 @@ class CombatScene: SKScene {
         loadEnemyFrames(enemy)
         enemyNode?.removeAllActions()
         enemyNode?.texture = enemyIdleFrames.first
+        // Reset scale in case a tap-pop or telegraph pulse was mid-flight.
+        enemyNode?.xScale = -2.5
+        enemyNode?.yScale = 2.5
+    }
+
+    /// Swaps the hero sprite's class — used when the player retires or
+    /// changes their hero mid-run without rebuilding the whole scene.
+    /// Caller should follow up with `playHeroIdle()` to resume animating.
+    func updateHero(_ hero: CharacterClass) {
+        heroClass           = hero
+        isHeroDeathPlaying  = false
+        loadHeroFrames()
+        heroNode?.removeAllActions()
+        heroNode?.texture = heroIdleFrames.first
+        heroNode?.setScale(2.5)
     }
 
     // MARK: - Zone background
@@ -300,6 +316,52 @@ class CombatScene: SKScene {
         let anim = SKAction.animate(with: frames, timePerFrame: fps)
         let done = SKAction.run { [weak self] in self?.playEnemyIdle() }
         enemyNode.run(.sequence([anim, done]), withKey: "anim")
+    }
+
+    /// Instant squash-and-pop on the enemy when the player taps. The damage
+    /// number and hurt animation still arrive on their usual delay; this just
+    /// gives the tap an immediate, satisfying response.
+    ///
+    /// The enemy faces left via a negative xScale (base 2.5), so a uniform
+    /// `scale(to:)` would flip the sprite. Instead we snap to a squashed scale
+    /// and grow back with a custom action that drives both axes explicitly —
+    /// which also stays correct under rapid, overlapping taps.
+    func tapFeedback() {
+        guard isReady, !isEnemyDeathPlaying else { return }
+        enemyNode.removeAction(forKey: "tapPop")
+        enemyNode.xScale = -2.25
+        enemyNode.yScale = 2.25
+        let grow = SKAction.customAction(withDuration: 0.10) { node, elapsed in
+            let s = 2.25 + (2.5 - 2.25) * (elapsed / 0.10)
+            node.xScale = -s
+            node.yScale = s
+        }
+        enemyNode.run(grow, withKey: "tapPop")
+    }
+
+    // MARK: - Heavy-attack telegraph (Phase 2b)
+
+    /// Signal that the enemy is charging a heavy attack: a few scale pulses plus
+    /// a warning glyph, so the player knows a dodge is coming up.
+    func showTelegraph() {
+        guard isReady, !isEnemyDeathPlaying else { return }
+        enemyNode.removeAction(forKey: "tapPop")
+        enemyNode.removeAction(forKey: "telegraph")
+        // Relative scale keeps the enemy's left-facing (negative xScale) intact.
+        let up   = SKAction.scale(by: 1.20, duration: 0.16)
+        let down = SKAction.scale(by: 1.0 / 1.20, duration: 0.16)
+        enemyNode.run(.repeat(.sequence([up, down]), count: 3), withKey: "telegraph")
+        floatText("⚠", at: CGPoint(x: 150, y: 112),
+                  color: UIColor(red: 1.0, green: 0.32, blue: 0.18, alpha: 1), fontSize: 24)
+    }
+
+    /// Feedback for a successful dodge: a blue "DODGED!" and a quick sidestep.
+    func showDodge() {
+        guard isReady else { return }
+        floatText("DODGED!", at: CGPoint(x: 52, y: 104),
+                  color: UIColor(red: 0.40, green: 0.85, blue: 1.0, alpha: 1), fontSize: 15)
+        heroNode.run(.sequence([.moveBy(x: -14, y: 0, duration: 0.08),
+                                .moveBy(x:  14, y: 0, duration: 0.12)]))
     }
 
     private func fireProjectile(texture: SKTexture, fromHero: Bool) {
