@@ -13,6 +13,12 @@ struct ContentView: View {
     }()
     @State private var previousCharacter: CharacterClass? = nil
     @State private var showTitle = true
+    // Set only when "Change Hero" is tapped mid-run (never for the title
+    // screen's "New Hero"). Lets onSelect below tell the two flows apart:
+    // a mid-run swap must preserve soul shards, prestige upgrades, deepest
+    // floor ever, etc. via DungeonGame.changeCharacter(to:); a deliberate
+    // "New Hero" from the title screen is the one place a full wipe is correct.
+    @State private var pendingHeroSwap: DungeonGame? = nil
 
     var body: some View {
         if showTitle {
@@ -32,7 +38,9 @@ struct ContentView: View {
             )
             .transition(.opacity)
         } else if let character = selectedCharacter {
-            GameView(character: character) {
+            GameView(character: character) { liveGame in
+                liveGame.save()
+                pendingHeroSwap  = liveGame
                 previousCharacter = character
                 selectedCharacter = nil
             }
@@ -41,13 +49,21 @@ struct ContentView: View {
                 onCancel: previousCharacter != nil ? {
                     selectedCharacter = previousCharacter
                     previousCharacter = nil
+                    pendingHeroSwap   = nil
                 } : nil,
                 onSelect: { newCharacter in
-                    if previousCharacter != nil { DungeonGame.clearSave() }
+                    if let liveGame = pendingHeroSwap {
+                        liveGame.changeCharacter(to: newCharacter)
+                        liveGame.save()
+                    } else if previousCharacter != nil {
+                        DungeonGame.clearSave()
+                    }
+                    pendingHeroSwap   = nil
                     selectedCharacter = newCharacter
                     previousCharacter = nil
                     Analytics.characterSelected(characterID: newCharacter.id)
-                }
+                },
+                isDestructiveReset: pendingHeroSwap == nil
             )
         }
     }
@@ -224,13 +240,20 @@ struct CharacterSelectView: View {
     let onCancel: (() -> Void)?
     let onSelect: (CharacterClass) -> Void
     var dynastyContext: DynastySelectContext? = nil
+    // True only for the title screen's "New Hero" flow, which really does wipe
+    // the save. Mid-run hero swaps (Change Hero) keep every soul shard,
+    // prestige upgrade, and deepest-floor record, so they get a reassuring
+    // message instead of the data-loss warning.
+    var isDestructiveReset: Bool = true
 
     init(onCancel: (() -> Void)? = nil,
          onSelect: @escaping (CharacterClass) -> Void,
-         dynastyContext: DynastySelectContext? = nil) {
+         dynastyContext: DynastySelectContext? = nil,
+         isDestructiveReset: Bool = true) {
         self.onCancel = onCancel
         self.onSelect = onSelect
         self.dynastyContext = dynastyContext
+        self.isDestructiveReset = isDestructiveReset
     }
 
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
@@ -266,10 +289,17 @@ struct CharacterSelectView: View {
                             .padding(.horizontal, 16)
                             .padding(.bottom, 16)
                     }
-                } else if onCancel != nil {
-                    Text("Warning: changing your hero resets all progress.")
+                } else if onCancel != nil && isDestructiveReset {
+                    Text("Warning: starting a new hero resets all progress.")
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundStyle(Color(red: 1.00, green: 0.45, blue: 0.25))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 16)
+                } else if onCancel != nil {
+                    Text("Your soul shards and prestige upgrades carry over.")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Color.white.opacity(0.55))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
@@ -418,7 +448,7 @@ struct CharacterCardView: View {
 
 struct GameView: View {
     let character: CharacterClass
-    let onChangeCharacter: () -> Void
+    let onChangeCharacter: (DungeonGame) -> Void
 
     @State private var game: DungeonGame
     @State private var combatScene: CombatScene
@@ -437,7 +467,7 @@ struct GameView: View {
     @AppStorage("com.oneMoreFloor.seenIntro")            private var seenIntro            = false
     @State private var showIntro = false
 
-    init(character: CharacterClass, onChangeCharacter: @escaping () -> Void) {
+    init(character: CharacterClass, onChangeCharacter: @escaping (DungeonGame) -> Void) {
         self.character = character
         self.onChangeCharacter = onChangeCharacter
         let g = DungeonGame(character: character)
@@ -626,6 +656,11 @@ struct GameView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 .animation(.spring(response: 0.5, dampingFraction: 0.8), value: event.id)
+            } else if game.isRaidActive {
+                // Full-screen raid takeover — shown above everything else while the
+                // side-scrolling arena combat plays out. Returns to dungeon when done.
+                RaidView(game: game)
+                    .transition(.opacity)
             }
         }
         .sheet(isPresented: showSheet) {
@@ -764,7 +799,7 @@ struct GameView: View {
                 // menu/sheet is open so the player has time to manage. In manual
                 // mode the tick only handles regen/spawn; taps drive the fight.
                 let menuOpen = selectedTab != .battle || showStore || showSettings || showIntro
-                if !isFading && !game.pendingRestSite && !menuOpen {
+                if !isFading && !game.pendingRestSite && !game.isRaidActive && !menuOpen {
                     game.tick()
                 }
             }
@@ -778,7 +813,8 @@ struct GameView: View {
         game.isGameOver ||
         offlineSummary != nil ||
         game.pendingRestSite ||
-        game.pendingFloorEvent != nil
+        game.pendingFloorEvent != nil ||
+        game.isRaidActive
     }
 
     private var showSheet: Binding<Bool> {
@@ -796,7 +832,7 @@ struct GameView: View {
         case .items:
             ItemsTabView(game: game)
         case .prestige:
-            PrestigeTabView(game: game, onChangeCharacter: onChangeCharacter)
+            PrestigeTabView(game: game, combatScene: combatScene, onChangeCharacter: { onChangeCharacter(game) })
         case .quests:
             QuestsTabView(game: game)
         case .battle:
@@ -1668,24 +1704,64 @@ struct DescentBarView: View {
 struct ActiveEffectsBarView: View {
     let game: DungeonGame
     @State private var selectedEffect: ActiveEffect?
+    @State private var isExpanded = false
 
     var body: some View {
         if !game.activeEffects.isEmpty {
-            let rows = stride(from: 0, to: game.activeEffects.count, by: 3).map {
-                Array(game.activeEffects[$0..<min($0 + 3, game.activeEffects.count)])
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    HStack(spacing: 8) {
-                        ForEach(row) { effect in
-                            effectPill(effect)
-                                .onTapGesture { selectedEffect = effect }
+            VStack(alignment: .leading, spacing: 0) {
+                // The header is always visible — one compact row showing a preview of
+                // the effect icons and a count, with a chevron to signal it's tappable.
+                // Collapsed by default so it never steals vertical space from the action buttons.
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { isExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        // Peek at the first few icons so the player knows what's in there
+                        // even when the list is collapsed.
+                        HStack(spacing: 2) {
+                            ForEach(game.activeEffects.prefix(5)) { effect in
+                                Text(effect.icon).font(.system(size: 13))
+                            }
+                            if game.activeEffects.count > 5 {
+                                Text("+\(game.activeEffects.count - 5)")
+                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(Color.white.opacity(0.40))
+                            }
+                        }
+                        Text("\(game.activeEffects.count) EFFECTS")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(Color.white.opacity(0.40))
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Color.white.opacity(0.30))
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
+
+                // Full pill grid — only visible when the player taps the header.
+                // Rows of 3 so wide pill names don't get clipped.
+                if isExpanded {
+                    let rows = stride(from: 0, to: game.activeEffects.count, by: 3).map {
+                        Array(game.activeEffects[$0..<min($0 + 3, game.activeEffects.count)])
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                            HStack(spacing: 8) {
+                                ForEach(row) { effect in
+                                    effectPill(effect)
+                                        .onTapGesture { selectedEffect = effect }
+                                }
+                            }
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 6)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 6)
             .sheet(item: $selectedEffect) { effect in
                 EffectDetailView(effect: effect)
                     .presentationDetents([.height(260)])
@@ -1786,6 +1862,7 @@ struct EffectDetailView: View {
             }
 
             VStack(spacing: 10) {
+                // Flat stat modifiers
                 if effect.atkMod != 0 {
                     effectRow(label: "Attack", value: effect.atkMod)
                 }
@@ -1797,6 +1874,17 @@ struct EffectDetailView: View {
                 }
                 if effect.regenMod != 0 {
                     effectRow(label: "HP Regen", value: effect.regenMod)
+                }
+                // Triggered effects — shown as descriptive strings since they
+                // aren't simple +/- numbers.
+                if effect.onKillHealPercent > 0 {
+                    effectRowText(label: "On Kill", value: "Heal \(Int(effect.onKillHealPercent * 100))% max HP")
+                }
+                if effect.thornsDamagePercent > 0 {
+                    effectRowText(label: "On Hit Taken", value: "Reflect \(Int(effect.thornsDamagePercent * 100))% back")
+                }
+                if effect.splashDamagePercent > 0 {
+                    effectRowText(label: "On Strike", value: "Splash \(Int(effect.splashDamagePercent * 100))% to nearby")
                 }
             }
             .padding(.horizontal, 32)
@@ -1815,6 +1903,22 @@ struct EffectDetailView: View {
                 .font(.system(size: 13, weight: .bold, design: .monospaced))
                 .foregroundStyle(value > 0 ? Color(red: 0.3, green: 0.85, blue: 0.45)
                                            : Color(red: 0.95, green: 0.35, blue: 0.35))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(Color(white: 0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func effectRowText(label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .foregroundStyle(Color(white: 0.6))
+            Spacer()
+            Text(value)
+                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.45))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -2017,6 +2121,7 @@ struct RestSiteCardView: View {
     private let accentRest    = Color(red: 0.30, green: 0.85, blue: 0.45)
     private let accentDescend = Color(red: 0.95, green: 0.45, blue: 0.25)
     private let accentCamp    = Color(red: 0.45, green: 0.80, blue: 0.95)
+    private let accentRaid    = Color(red: 0.75, green: 0.30, blue: 1.00)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -2095,14 +2200,25 @@ struct RestSiteCardView: View {
             Divider()
                 .background(Color.white.opacity(0.10))
 
-            HStack(spacing: 10) {
-                choiceButton(label: "DESCEND",
-                             summary: "Greed climbs, danger rises",
-                             accent: accentDescend) { game.descendPastRestSite() }
+            VStack(spacing: 8) {
+                HStack(spacing: 10) {
+                    choiceButton(label: "DESCEND",
+                                 summary: "Greed climbs, danger rises",
+                                 accent: accentDescend) { game.descendPastRestSite() }
 
-                choiceButton(label: "REST & BANK",
-                             summary: "Bank \(game.atRiskGold)g, heal full",
-                             accent: accentRest) { game.rest() }
+                    choiceButton(label: "REST & BANK",
+                                 summary: "Bank \(game.atRiskGold)g, heal full",
+                                 accent: accentRest) { game.rest() }
+                }
+
+                // Raid: a lateral gamble — carry in current blessings and fight
+                // for soul shards. Losing strips all blessings and forfeits the
+                // at-risk pot, so there's real skin in the game.
+                choiceButton(
+                    label: "⚔  LAUNCH RAID",
+                    summary: "Win: ◈ Soul Shards   ·   Fail: blessings + \(game.atRiskGold)g lost",
+                    accent: accentRaid
+                ) { game.launchRaid() }
             }
         }
         .padding(16)
@@ -2302,6 +2418,7 @@ struct UpgradesTabView: View {
 
 struct PrestigeTabView: View {
     let game: DungeonGame
+    let combatScene: CombatScene
     let onChangeCharacter: () -> Void
     @State private var showStore = false
     @State private var showDynastySelect = false
@@ -2391,6 +2508,8 @@ struct PrestigeTabView: View {
                 onCancel: { showDynastySelect = false },
                 onSelect: { newChar in
                     game.prestige(switchingTo: newChar)
+                    combatScene.updateHero(newChar)
+                    combatScene.playHeroIdle()
                     showDynastySelect = false
                 },
                 dynastyContext: DynastySelectContext(

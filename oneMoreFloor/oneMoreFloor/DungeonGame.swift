@@ -159,6 +159,10 @@ class DungeonGame {
     // combat and presents the Descend / Rest decision.
     var pendingRestSite: Bool = false
 
+    // Set true when the player launches a Raid from a rest site. Pauses the
+    // dungeon tick loop while RaidView runs the multi-enemy side combat.
+    var isRaidActive: Bool = false
+
     // Auto-battle: when on, the game loop takes a turn for the player each tick
     // (hands-off grinding). Mirrored from the UI's @AppStorage toggle so the
     // long-lived game-loop task always reads a LIVE value — reading the view's
@@ -572,6 +576,50 @@ class DungeonGame {
         log("You press deeper into the dark...")
     }
 
+    // MARK: - Raid (side-scrolling multi-enemy combat challenge)
+
+    /// Launch a raid from the current rest site. Clears the rest-site gate and
+    /// hands control to RaidView. The hero carries in their live HP and all
+    /// active blessings — clearing all waves earns soul shards, falling in
+    /// battle strips blessings and forfeits the at-risk gold pot.
+    func launchRaid() {
+        pendingRestSite = false
+        isRaidActive = true
+        log("⚔️ Into the RAID — blessings and gold ride on this...")
+    }
+
+    /// Resolve the raid. Called by RaidView after all waves are cleared (success)
+    /// or the hero falls (failure). Returns control to the dungeon loop.
+    func completeRaid(success: Bool) {
+        isRaidActive = false
+        if success {
+            let earned = max(5, currentFloor / 3)
+            soulShards += earned
+            log("🏆 RAID COMPLETE — +\(earned) Soul Shard\(earned == 1 ? "" : "s")!")
+        } else {
+            let blessingCount = activeEffects.filter { $0.isBlessing }.count
+            let goldLost      = atRiskGold
+            stripBlessings()
+            atRiskGold = 0
+            // Hero exits gravely wounded — alive but weakened by the defeat.
+            heroHp = max(1, heroMaxHp / 3)
+            log("💀 RAID FAILED — \(blessingCount) blessing\(blessingCount == 1 ? "" : "s") lost, \(goldLost)g forfeit.")
+        }
+    }
+
+    /// Reverse and remove all blessing-type active effects. Curses stay since
+    /// their negative effects were already applied and should persist.
+    private func stripBlessings() {
+        for effect in activeEffects where effect.isBlessing {
+            heroAtk   = max(1, heroAtk   - effect.atkMod)
+            heroDef   = max(0, heroDef   - effect.defMod)
+            heroMaxHp = max(1, heroMaxHp - effect.maxHpMod)
+            heroRegen = max(0, heroRegen - effect.regenMod)
+        }
+        heroHp = min(heroHp, heroMaxHp)
+        activeEffects.removeAll { $0.isBlessing }
+    }
+
     private func spawnMonster() {
         let f      = currentFloor
         currentFightFloor = f
@@ -690,6 +738,16 @@ class DungeonGame {
                 log("Divine light heals +\(healAmt) HP")
             }
 
+            // Blood Rush: each active effect with onKillHealPercent > 0 restores
+            // a fraction of max HP. Multiple stacks add together before rounding.
+            let killHealFraction = activeEffects.reduce(0.0) { $0 + $1.onKillHealPercent }
+            if killHealFraction > 0 {
+                let healAmt = max(1, Int(Double(heroMaxHp) * killHealFraction))
+                heroHp = min(heroMaxHp, heroHp + healAmt)
+                onHeroHeal?(healAmt)
+                log("❤️‍🔥 Blood Rush: +\(healAmt) HP!")
+            }
+
             if isBossKill {
                 let killedZone = DungeonGame.zones.last(where: { killedOnFloor >= $0.minFloor }) ?? DungeonGame.zones[0]
                 pendingBossVictory = BossVictory(
@@ -743,6 +801,17 @@ class DungeonGame {
             onHeroHurt?()
             onHeroDamageTaken?(dmg)
             log("\(monsterName) hits \(dmg) — Hero \(heroHp)/\(heroMaxHp)hp")
+
+            // Thorn Mantle: reflect a portion of the incoming damage back to the
+            // monster. Capped at max(1, monsterHp - 1) so thorns can't deal the
+            // killing blow — the hero finishes the job on their next strike.
+            let thornsFraction = activeEffects.reduce(0.0) { $0 + $1.thornsDamagePercent }
+            if thornsFraction > 0, monsterHp > 1 {
+                let reflected = min(monsterHp - 1, max(1, Int(Double(dmg) * thornsFraction)))
+                monsterHp -= reflected
+                displayMonsterHp = max(0, monsterHp)
+                log("🌿 Thorns reflect \(reflected) damage!")
+            }
         }
     }
 
@@ -939,6 +1008,28 @@ class DungeonGame {
         log("Earned \(earned) Soul Shard\(earned == 1 ? "" : "s"). Total: \(soulShards)")
         log("Resetting run...")
 
+        resetRunState()
+    }
+
+    /// Swap the active hero without requiring a prestige-eligible run. Unlike
+    /// `prestige(switchingTo:)`, this grants no soul shards, doesn't count as
+    /// a prestige, and doesn't add a dynasty legacy bonus — it's a free,
+    /// anytime convenience. Every piece of account-wide progress (soul
+    /// shards, prestige upgrades, deepest floor ever, total prestiges,
+    /// legacy bonuses, equipped gear, and inventory) survives untouched;
+    /// only the current run resets, same as `restart()`.
+    func changeCharacter(to newCharacter: CharacterClass) {
+        characterID = newCharacter.id
+        log("Hero swapped to \(newCharacter.name). Resetting run...")
+        resetRunState()
+    }
+
+    /// Resets the current run to a fresh start for whichever character is
+    /// now active (`character`), then recomputes starting stats from
+    /// permanent prestige upgrades, soul shards, legacy bonuses, and
+    /// equipped gear. Shared by `prestige(switchingTo:)` and
+    /// `changeCharacter(to:)` — the two paths that swap the active hero.
+    private func resetRunState() {
         activeEffects      = []
         pendingFloorEvent  = nil
         atRiskGold         = 0
@@ -1211,6 +1302,18 @@ class DungeonGame {
                 heroHp = max(1, heroHp - quarter)
                 log("🌫️ The void fog saps \(quarter) HP from you!")
             }
+        case .bloodRush:
+            applyAndRecord(ActiveEffect(name: "Blood Rush", icon: "❤️‍🔥",
+                                        isBlessing: true, onKillHealPercent: 0.08))
+            log("❤️‍🔥 Blood Rush: each kill restores 8% max HP!")
+        case .thornMantle:
+            applyAndRecord(ActiveEffect(name: "Thorn Mantle", icon: "🌿",
+                                        isBlessing: true, thornsDamagePercent: 0.20))
+            log("🌿 Thorn Mantle: attackers take 20% of damage dealt back!")
+        case .warSurge:
+            applyAndRecord(ActiveEffect(name: "War Surge", icon: "💥",
+                                        isBlessing: true, splashDamagePercent: 0.40))
+            log("💥 War Surge: each strike splashes 40% damage to a nearby enemy!")
         case .strangeAltar:
             applyMysteryOutcome()
         }
@@ -1218,9 +1321,10 @@ class DungeonGame {
 
     private func applySecondaryEffect(_ t: FloorEventTemplate) {
         switch t {
-        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing, .reviveBlessing:
+        case .ancientShrine, .goldCache, .atkBlessing, .defBlessing, .regenBlessing,
+             .reviveBlessing, .bloodRush, .thornMantle:
             log("You pass by without stopping.")
-        case .bloodPactAltar, .ironForge, .lifeVessel:
+        case .bloodPactAltar, .ironForge, .lifeVessel, .warSurge:
             log("You leave the altar untouched.")
         case .strangeAltar:
             log("You leave the strange altar behind.")

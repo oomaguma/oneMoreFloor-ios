@@ -3,9 +3,10 @@ import SpriteKit
 // Shared SKView used only to rasterize atlas-backed textures into plain textures,
 // which is required because SKTexture(rect:in:) gives wrong dimensions when
 // the source texture is backed by a compiled .atlasc file.
-private let _sheetBaker = SKView()
+// Internal (not private) so RaidScene.swift can share the same baker and helper.
+let _sheetBaker = SKView()
 
-private func buildFrames(_ spec: AnimationSpec) -> [SKTexture] {
+func buildFrames(_ spec: AnimationSpec) -> [SKTexture] {
     // Compiled .atlasc stores texture names with %20 for spaces; encode before lookup.
     let lookupName = spec.imageName.replacingOccurrences(of: " ", with: "%20")
     let raw = SKTexture(imageNamed: lookupName)
@@ -91,7 +92,7 @@ class CombatScene: SKScene {
     private var heroProjectileTexture:  SKTexture?
     private var enemyProjectileTexture: SKTexture?
 
-    private let heroClass: CharacterClass
+    private var heroClass: CharacterClass
     private var currentEnemy: EnemyType
 
     init(hero: CharacterClass, initialEnemy: EnemyType, initialZoneID: String = "entrance") {
@@ -173,6 +174,18 @@ class CombatScene: SKScene {
         // Reset scale in case a tap-pop or telegraph pulse was mid-flight.
         enemyNode?.xScale = -2.5
         enemyNode?.yScale = 2.5
+    }
+
+    /// Swaps the hero sprite's class — used when the player retires or
+    /// changes their hero mid-run without rebuilding the whole scene.
+    /// Caller should follow up with `playHeroIdle()` to resume animating.
+    func updateHero(_ hero: CharacterClass) {
+        heroClass           = hero
+        isHeroDeathPlaying  = false
+        loadHeroFrames()
+        heroNode?.removeAllActions()
+        heroNode?.texture = heroIdleFrames.first
+        heroNode?.setScale(2.5)
     }
 
     // MARK: - Zone background
