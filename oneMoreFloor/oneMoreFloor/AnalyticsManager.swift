@@ -113,6 +113,12 @@ enum Analytics {
         capture("character_selected", properties: ["character_id": characterID])
     }
 
+    /// The first-session tutorial finished (first camp resolved). Compare against
+    /// character_selected to see how many new players make it through.
+    static func tutorialCompleted() {
+        capture("tutorial_completed")
+    }
+
     // MARK: - Private
 
     private static func capture(_ event: String, properties: [String: Any]? = nil) {

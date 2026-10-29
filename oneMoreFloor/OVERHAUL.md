@@ -176,9 +176,14 @@ Raid glow-up (2026-10-29):
 - [x] **Result screen** reads `DungeonGame.raidOutcome` (cleared / escaped / lost, shards, loot, what was lost). The raid resolves the instant it ends — Continue only dismisses — so closing the app on the result screen can't count as abandoning it.
 - [ ] Still to do: class ability + heavy-attack dodges inside raids; a mid-wave Retreat at low HP; raid trophies for a collection codex. No paid raid entries or energy systems.
 
-**3d. Onboarding (FTUE)**
-- [ ] Replace the text-wall `IntroCardView` with teach-by-doing coach marks: first tap within 5s, guaranteed drop on floor 3, scripted first Rest decision by floor 5. *(Its current copy also says "stop tapping and your hero auto-battles," which is stale since the idle fallback was removed.)*
-- [ ] Move the notification permission prompt from cold launch to after the first Rest. The ATT prompt also fires on cold launch — consider deferring it too.
+**3d. Onboarding (FTUE) — ✅ done (2026-10-29)**
+- [x] The text-wall `IntroCardView` (with its stale "auto-battles on its own" copy) is gone. `Onboarding/Tutorial.swift` drives in-the-moment `CoachBubble`s through a persisted `TutorialStep` (strike → greed → atRisk → campAhead → firstCamp → done): **TAP TO STRIKE** over the STRIKE button the moment an enemy is up; **GREED RISING** under the gauge on floor 2; **GOLD AT RISK** on floor 3 (each advances on GOT IT or by reaching the next beat).
+- [x] Scripted first run: a guaranteed boss-tier drop on floor 3 (`DungeonGame.grantTutorialDrop`) and an early camp on floor 5 with a one-line explainer of Rest vs Descend (raid + ad buttons hidden). No random floor events until the tutorial is done (one fired on floor 2 on top of the greed hint in testing).
+- [x] The first enemy spawns immediately on entering the battle screen (`immediateSpawn` in onAppear) — a fresh run used to open on ~4s of "…".
+- [x] UMP consent + ATT (was at launch in `GameViewController`) now wait for the tutorial's first camp (`.tutorialFinished`). Returning players (tutorial done, or saw the old intro) are unaffected. Verified on a clean install: zero prompts until after the first REST.
+- [x] Notification permission (was at launch in `AppDelegate`) moved to where it obviously helps: the "while you were away" summary after the hero **died while the player was away**. A soft ask ("Want a heads-up next time your hero falls?" + NOTIFY ME) appears only while iOS has never asked (`NotificationManager.canAskForPermission()`); the real iOS dialog only on NOTIFY ME, so a "no" to us doesn't burn the one-time system prompt. Players who never die offline are never asked (Settings has the toggle). Verified both paths in the simulator. DEBUG: `-debugOfflineDeath YES` fakes the summary.
+- [x] Death notification softened from "Your hero has fallen!" to "<Hero> fell in the dungeon — banked gold and upgrades are safe" (engagement chart: no guilt mechanics).
+- [x] `Analytics.tutorialCompleted()` → PostHog `tutorial_completed`; compare with `character_selected` for the funnel.
 
 **3e. Retention loops (from the engagement-loop brainstorm)**
 - [ ] Hall of the Fallen — a memorial of dead heroes ("fell on floor 23 with 1,240g at ×3.4"). Identity + investment.

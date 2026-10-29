@@ -1,86 +1,22 @@
 // DecisionCards.swift
-// Centered decision cards: first-run onboarding and the Rest / Descend choice.
+// Centered decision cards: the Rest / Descend choice and the raid briefing.
+// (First-run onboarding now lives in Onboarding/Tutorial.swift as in-game coach bubbles.)
 
 import SwiftUI
 
 // MARK: - Rest Site (push-your-luck decision)
 
-// MARK: - First-run Onboarding
-
-/// Shown once on the first run (gated by the `seenIntro` flag). Frames the new
-/// push-your-luck loop in three beats, since the combat is no longer a passive
-/// idle game and new players need to know to tap, push, and bank.
-struct IntroCardView: View {
-    let onBegin: () -> Void
-
-    private let gold = Color(red: 1.0, green: 0.82, blue: 0.30)
-
-    var body: some View {
-        ZStack {
-            Theme.Palette.abyss.ignoresSafeArea()
-
-            VStack(spacing: 22) {
-                Spacer()
-                Text("⚔️").font(.system(size: 52))
-                Text("HOW TO SURVIVE")
-                    .font(Theme.Fonts.display(22))
-                    .foregroundStyle(gold)
-
-                VStack(alignment: .leading, spacing: 18) {
-                    introRow(icon: "hand.tap.fill", tint: Color(red: 1.0, green: 0.45, blue: 0.35),
-                             title: "TAP TO FIGHT",
-                             body: "Tap to strike. Stop tapping and your hero auto-battles on its own.")
-                    introRow(icon: "flame.fill", tint: Color(red: 0.95, green: 0.45, blue: 0.25),
-                             title: "PUSH YOUR LUCK",
-                             body: "The deeper you descend without resting, the higher your GREED — more gold and better loot.")
-                    introRow(icon: "lock.open.fill", tint: gold,
-                             title: "BANK OR LOSE IT",
-                             body: "Gold you earn is AT RISK until you bank it at a camp. Die and it's gone. How greedy do you dare to be?")
-                }
-                .padding(.horizontal, 8)
-
-                Spacer()
-
-                Button(action: onBegin) {
-                    Text("DESCEND")
-                        .font(Theme.Fonts.label(17))
-                        .foregroundStyle(.black)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 15)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(gold))
-                }
-                .padding(.bottom, 8)
-            }
-            .padding(28)
-        }
-        .preferredColorScheme(.dark)
-    }
-
-    private func introRow(icon: String, tint: Color, title: String, body: String) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 22))
-                .foregroundStyle(tint)
-                .frame(width: 32)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .font(Theme.Fonts.label(14))
-                    .foregroundStyle(.white)
-                Text(body)
-                    .font(Theme.Fonts.body(13))
-                    .foregroundStyle(Color.white.opacity(0.65))
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-}
-
+/// The camp after a boss (and the tutorial's scripted first camp): bank the
+/// pot and heal, push on with greed climbing, or open the raid briefing.
 struct RestSiteCardView: View {
     let game: DungeonGame
     let adManager: AdManager
     @State private var didDouble = false
     /// LAUNCH RAID opens a briefing first, so the gamble is an informed one.
     @State private var showRaidBriefing = false
+    /// The tutorial's scripted first camp keeps the choice to Rest vs. Descend.
+    @AppStorage(TutorialStep.storageKey) private var tutorialStepRaw = 0
+    private var isFirstCamp: Bool { tutorialStepRaw == TutorialStep.firstCamp.rawValue }
 
     // The three paths, each with its own color so the choice reads instantly:
     // green = safe, flame = greedy, violet = the raid side-gamble.
@@ -117,6 +53,15 @@ struct RestSiteCardView: View {
                     .gameShadow(3)
             }
 
+            // Tutorial: spell out the one decision this whole game is about.
+            if isFirstCamp {
+                Text("Your first camp. REST banks the gold and heals you, but greed resets. DESCEND keeps greed climbing, with the gold still at risk.")
+                    .font(Theme.Fonts.body(13))
+                    .foregroundStyle(Theme.Palette.parchment.opacity(0.85))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // The pot is the star: it's what you'd lose by pushing on and dying.
             VStack(spacing: 2) {
                 HStack(spacing: 6) {
@@ -144,7 +89,7 @@ struct RestSiteCardView: View {
 
             // Optional rewarded bonus: double the at-risk pot before deciding.
             // Opt-in only; Remove Ads buyers simply don't see this ad button.
-            if game.atRiskGold > 0 && !StoreManager.shared.hasPurchasedRemoveAds {
+            if game.atRiskGold > 0 && !StoreManager.shared.hasPurchasedRemoveAds && !isFirstCamp {
                 if didDouble {
                     Label("2× POT APPLIED", systemImage: "checkmark.seal.fill")
                         .font(Theme.Fonts.label(13))
@@ -193,6 +138,7 @@ struct RestSiteCardView: View {
             // Raid: a lateral gamble — carry in current blessings and fight
             // for soul shards. Losing strips all blessings and forfeits the
             // at-risk pot, so there's real skin in the game.
+            if !isFirstCamp {
             choiceButton(label: "RAID…",
                          icon: "flag.2.crossed.fill",
                          summary: "Win +\(game.raidShardReward) ◈ · see the briefing",
@@ -200,6 +146,7 @@ struct RestSiteCardView: View {
                 withAnimation(.spring(response: 0.35)) { showRaidBriefing = true }
             }
                 .frame(height: 64)
+            }
         }
         .padding(18)
         .gamePanel(tint: accentCamp.opacity(0.7), cornerRadius: 20)

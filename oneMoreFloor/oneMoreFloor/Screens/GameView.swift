@@ -25,8 +25,14 @@ struct GameView: View {
     @State private var showSettings = false
     @AppStorage("com.oneMoreFloor.notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("com.oneMoreFloor.autoBattleEnabled")    private var autoBattle           = false
+    // Players who saw the old text-wall intro have already learned the basics.
     @AppStorage("com.oneMoreFloor.seenIntro")            private var seenIntro            = false
-    @State private var showIntro = false
+    // First-session tutorial progress (see Onboarding/Tutorial.swift).
+    @AppStorage(TutorialStep.storageKey)                 private var tutorialStepRaw      = 0
+    @AppStorage(TutorialStep.dropGivenKey)               private var tutorialDropGiven    = false
+    /// Set when a returning player's hero died while away and iOS has never
+    /// asked about notifications — the offline summary then offers a soft ask.
+    @State private var offerNotificationAsk = false
     // Juice triggers: each bump plays one screen shake / red hurt flash.
     @State private var shakeTrigger = 0
     @State private var hurtTrigger  = 0
@@ -56,7 +62,8 @@ struct GameView: View {
                               onSettings: { showSettings = true },
                               onStore: { showStore = true },
                               shakeTrigger: shakeTrigger,
-                              hurtTrigger: hurtTrigger)
+                              hurtTrigger: hurtTrigger,
+                              tutorialStepRaw: $tutorialStepRaw)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 CustomGameTabBar(selectedTab: $selectedTab, hasClaimableQuest: game.hasClaimableQuest)
@@ -123,6 +130,8 @@ struct GameView: View {
                 OfflineSummaryView(
                     summary: summary,
                     adManager: adManager,
+                    offerNotifications: offerNotificationAsk,
+                    onEnableNotifications: { NotificationManager.shared.requestPermission() },
                     onDoubleGold: { game.gold += summary.goldEarned },
                     onDismiss: { offlineSummary = nil }
                 )
@@ -172,13 +181,13 @@ struct GameView: View {
         } message: {
             Text(abandonedRaidMessage)
         }
-        .fullScreenCover(isPresented: $showIntro) {
-            IntroCardView(onBegin: { seenIntro = true; showIntro = false })
-        }
         .preferredColorScheme(.dark)
         .onAppear {
             game.autoBattle = autoBattle
-            if !seenIntro { showIntro = true }   // first-run onboarding
+            // Anyone who saw the old intro skips the new tutorial.
+            if seenIntro && tutorialStepRaw == TutorialStep.strike.rawValue {
+                tutorialStepRaw = TutorialStep.done.rawValue
+            }
             if let summary = game.handleForeground() {
                 offlineSummary = summary
             }
@@ -187,7 +196,13 @@ struct GameView: View {
             // Applied after the offline sim so it can't immediately undo them.
             game.applyDebugLaunchArguments()
             if UserDefaults.standard.integer(forKey: "debugRaid") > 0 { offlineSummary = nil }
+            if let fake = DungeonGame.debugOfflineDeathSummary { offlineSummary = fake }
             #endif
+            // Put an enemy in front of the player right away. A fresh run used to
+            // open on ~4s of "…" before the first fight — dead air in exactly the
+            // minute that decides whether a new player sticks around. (No-op if a
+            // fight is already in progress.)
+            game.immediateSpawn()
             combatScene.updateZoneBackground(game.currentZone.id)
             if let enemy = game.currentEnemyType {
                 combatScene.updateEnemy(enemy)
@@ -286,10 +301,23 @@ struct GameView: View {
             }
             combatScene.playHeroIdle()
         }
+        .onChange(of: offlineSummary?.deaths ?? 0) { _, deaths in
+            // Hero died while away → check whether iOS can still be asked.
+            guard deaths > 0 else { offerNotificationAsk = false; return }
+            Task { offerNotificationAsk = await NotificationManager.shared.canAskForPermission() }
+        }
+        .onChange(of: game.pendingRestSite) { _, isUp in
+            // The first camp was just resolved (Rest, Descend, or Raid): the
+            // tutorial is done, and now is a fair moment to ask for permissions.
+            if !isUp && tutorialStepRaw == TutorialStep.firstCamp.rawValue {
+                finishTutorial()
+            }
+        }
         .onChange(of: autoBattle) { _, newValue in
             game.autoBattle = newValue   // keep the model's live flag in sync with the toggle
         }
-        .onChange(of: game.currentFloor) { _, _ in
+        .onChange(of: game.currentFloor) { _, floor in
+            advanceTutorial(forFloor: floor)
             isFading = true
             withAnimation(.easeOut(duration: 0.45)) { spriteOpacity = 0 }
             Task {
@@ -312,7 +340,7 @@ struct GameView: View {
                 // paused during transitions, the rest decision, and whenever a
                 // menu/sheet is open so the player has time to manage. In manual
                 // mode the tick only handles regen/spawn; taps drive the fight.
-                let menuOpen = selectedTab != .battle || showStore || showSettings || showIntro
+                let menuOpen = selectedTab != .battle || showStore || showSettings
                 if !isFading && !game.pendingRestSite && !game.isRaidScreenUp && !menuOpen {
                     game.tick()
                 }
@@ -328,6 +356,40 @@ struct GameView: View {
         if lost.goldLost > 0      { costs.append("\(lost.goldLost) gold") }
         let cost = costs.isEmpty ? "" : " You lost " + costs.joined(separator: " and ") + "."
         return "Leaving mid-raid counts as a loss." + cost
+    }
+
+    // MARK: - Tutorial
+
+    /// Floor-driven tutorial beats (first run only):
+    ///   floor 2 → GREED hint · floor 3 → AT RISK hint + a guaranteed drop ·
+    ///   floor 5 → a scripted early camp, so the Rest / Descend decision shows
+    ///   up in the first minute or two instead of at floor 10.
+    private func advanceTutorial(forFloor floor: Int) {
+        guard let step = TutorialStep(rawValue: tutorialStepRaw), step != .done else { return }
+
+        if step == .strike && floor >= 2 {
+            tutorialStepRaw = TutorialStep.greed.rawValue
+        }
+        if floor >= TutorialStep.guaranteedDropFloor && !tutorialDropGiven {
+            tutorialDropGiven = true
+            game.grantTutorialDrop()
+        }
+        if floor >= TutorialStep.guaranteedDropFloor && tutorialStepRaw == TutorialStep.greed.rawValue {
+            tutorialStepRaw = TutorialStep.atRisk.rawValue
+        }
+        if floor >= TutorialStep.firstCampFloor && tutorialStepRaw < TutorialStep.firstCamp.rawValue {
+            tutorialStepRaw = TutorialStep.firstCamp.rawValue
+            game.pendingRestSite = true
+        }
+    }
+
+    private func finishTutorial() {
+        tutorialStepRaw = TutorialStep.done.rawValue
+        // Ad consent / tracking can start now (GameViewController listens).
+        // Notifications are asked later, when they obviously help: the first
+        // time the player comes back to a hero who died while they were away.
+        NotificationCenter.default.post(name: .tutorialFinished, object: nil)
+        Analytics.tutorialCompleted()
     }
 
     // True whenever any full-screen overlay is displayed, so the item drop banner stays hidden

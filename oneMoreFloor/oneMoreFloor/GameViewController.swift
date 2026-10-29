@@ -17,8 +17,31 @@ class GameViewController: UIViewController {
         view.addSubview(vc.view)
         vc.didMove(toParent: self)
 
-        requestConsentThenStartAds()
+        // Ad consent + the tracking (ATT) prompt wait until the first-session
+        // tutorial is done: two system dialogs before the player has tapped
+        // anything is a fast way to lose them. No ads are shown during the
+        // tutorial anyway. Returning players (tutorial done, or saw the old
+        // intro) go straight through.
+        let returning = TutorialStep.current == .done
+            || UserDefaults.standard.bool(forKey: "com.oneMoreFloor.seenIntro")
+        if returning {
+            requestConsentThenStartAds()
+        } else {
+            tutorialObserver = NotificationCenter.default.addObserver(
+                forName: .tutorialFinished, object: nil, queue: .main
+            ) { [weak self] _ in
+                guard let self else { return }
+                if let observer = self.tutorialObserver {
+                    NotificationCenter.default.removeObserver(observer)
+                    self.tutorialObserver = nil
+                }
+                self.requestConsentThenStartAds()
+            }
+        }
     }
+
+    /// Waits for the tutorial to finish (first launch only).
+    private var tutorialObserver: NSObjectProtocol?
 
     private func requestConsentThenStartAds() {
         ConsentInformation.shared.requestConsentInfoUpdate(with: nil) { [weak self] error in

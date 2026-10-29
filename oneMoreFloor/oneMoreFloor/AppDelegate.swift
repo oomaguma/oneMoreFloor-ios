@@ -15,7 +15,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         Analytics.setup()
         Analytics.appLaunched()
-        NotificationManager.shared.requestPermission()
+        // Notification permission is no longer asked at launch — GameView asks
+        // after the tutorial's first camp, once the player has had some fun.
         GameCenterManager.shared.authenticate()
         return true
     }

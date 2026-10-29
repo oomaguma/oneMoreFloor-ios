@@ -37,6 +37,10 @@ struct BattleTabView: View {
     // Bumped by GameView's combat callbacks; each bump plays one shake / flash.
     let shakeTrigger: Int
     let hurtTrigger: Int
+    /// First-session tutorial progress (persisted by GameView).
+    @Binding var tutorialStepRaw: Int
+
+    private var tutorialStep: TutorialStep { TutorialStep(rawValue: tutorialStepRaw) ?? .done }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,6 +69,19 @@ struct BattleTabView: View {
                     BattleHeaderView(game: game, autoBattle: $autoBattle,
                                      onSettings: onSettings, onStore: onStore)
                     GreedGaugeView(game: game, onRest: { game.rest() })
+                    // Tutorial: explain greed and the at-risk pot right under
+                    // the gauge, the moment each one starts to matter.
+                    if tutorialStep == .greed {
+                        CoachBubble(icon: "flame.fill", title: "GREED RISING",
+                                    message: "Every floor without resting raises it: more gold, better loot.",
+                                    tint: Theme.Palette.flame, pointsUp: true,
+                                    onGotIt: { tutorialStepRaw = TutorialStep.atRisk.rawValue })
+                    } else if tutorialStep == .atRisk {
+                        CoachBubble(icon: "bag.fill", title: "GOLD AT RISK",
+                                    message: "It's only yours once you bank it at a camp. Fall, and it's gone.",
+                                    tint: Theme.Palette.gold, pointsUp: true,
+                                    onGotIt: { tutorialStepRaw = TutorialStep.campAhead.rawValue })
+                    }
                     VersusBarsView(game: game)
                         .allowsHitTesting(false)   // taps fall through to the strike catcher
                     if game.incomingHeavy {
@@ -73,9 +90,17 @@ struct BattleTabView: View {
                             .transition(.scale.combined(with: .opacity))
                     }
                     Spacer(minLength: 0)
+                    // Tutorial: the very first thing to learn, pointing down at STRIKE.
+                    if tutorialStep == .strike && game.canTap && !autoBattle {
+                        CoachBubble(icon: "hand.tap.fill", title: "TAP TO STRIKE",
+                                    message: "Hit STRIKE, or tap anywhere in the dungeon.",
+                                    tint: Theme.Palette.blood)
+                            .padding(.bottom, 6)
+                    }
                 }
                 .padding(.horizontal, 12)
                 .animation(.spring(response: 0.3), value: game.incomingHeavy)
+                .animation(.spring(response: 0.35), value: tutorialStepRaw)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 

@@ -9,10 +9,14 @@ import SwiftUI
 struct OfflineSummaryView: View {
     let summary: OfflineSummary
     let adManager: AdManager
+    /// Offer the notification soft ask (hero died while away, and iOS hasn't asked yet).
+    var offerNotifications = false
+    var onEnableNotifications: () -> Void = {}
     let onDoubleGold: () -> Void
     let onDismiss: () -> Void
 
     @State private var didDoubleGold = false
+    @State private var didAskNotifications = false
 
     var body: some View {
         ZStack {
@@ -41,6 +45,47 @@ struct OfflineSummaryView: View {
                     if summary.deaths > 0 {
                         summaryRow("Deaths", "\(summary.deaths)",
                                    Color(red: 1.0, green: 0.38, blue: 0.38))
+                    }
+                }
+
+                // The notification ask, at the moment it obviously helps: the hero
+                // just died while the player was away. Our own soft ask first —
+                // the real iOS dialog only appears if they tap NOTIFY ME.
+                if offerNotifications && summary.deaths > 0 {
+                    if didAskNotifications {
+                        Label("We'll give you a heads-up next time.", systemImage: "bell.fill")
+                            .font(Theme.Fonts.label(13))
+                            .foregroundStyle(Theme.Palette.gold)
+                    } else {
+                        // Big and obvious: the question on top, a full-width gold
+                        // button under it — same weight as the game's main actions.
+                        VStack(spacing: 10) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "bell.badge.fill")
+                                    .font(.system(size: 24, weight: .bold))
+                                    .foregroundStyle(Theme.Palette.gold)
+                                    .symbolEffect(.bounce, options: .repeat(.periodic(delay: 1.5)))
+                                Text("Want a heads-up next time your hero falls?")
+                                    .font(Theme.Fonts.label(15))
+                                    .foregroundStyle(Theme.Palette.parchment)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: 0)
+                            }
+                            Button {
+                                didAskNotifications = true
+                                onEnableNotifications()
+                            } label: {
+                                Label("NOTIFY ME", systemImage: "bell.fill")
+                                    .font(Theme.Fonts.display(18))
+                                    .foregroundStyle(Color.black.opacity(0.8))
+                            }
+                            .buttonStyle(ChunkyButtonStyle(face: Theme.Palette.gold, lip: Theme.Palette.goldDeep,
+                                                           cornerRadius: 12, depth: 4))
+                            .frame(height: 54)
+                        }
+                        .padding(14)
+                        .gamePanel(tint: Theme.Palette.gold.opacity(0.8), cornerRadius: 14)
+                        .shadow(color: Theme.Palette.gold.opacity(0.25), radius: 10)
                     }
                 }
 

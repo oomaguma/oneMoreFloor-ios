@@ -20,6 +20,8 @@
 //   -debugBlessings YES   Also grant War Surge, Thorn Mantle, and Blood Rush.
 //   -debugEvent <name>    Show a floor event card now (a FloorEventTemplate case,
 //                         e.g. lifeVessel, cursedSigil, bloodRush, strangeAltar).
+//   -debugOfflineDeath YES  Show a "while you were away" summary with one death,
+//                         to check the notification soft ask without waiting.
 
 #if DEBUG
 import Foundation
@@ -27,6 +29,13 @@ import Foundation
 extension DungeonGame {
 
     // MARK: - Launch-argument shortcuts
+
+    /// A fake offline summary with one death (-debugOfflineDeath YES), or nil.
+    static var debugOfflineDeathSummary: OfflineSummary? {
+        guard UserDefaults.standard.bool(forKey: "debugOfflineDeath") else { return nil }
+        return OfflineSummary(goldEarned: 42, deaths: 1, floorsCleared: 7,
+                              deepestFloor: 9, duration: 1800, stoppedByDeath: true)
+    }
 
     func applyDebugLaunchArguments() {
         let args = UserDefaults.standard

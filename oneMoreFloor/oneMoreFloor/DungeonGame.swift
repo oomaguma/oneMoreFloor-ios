@@ -1304,6 +1304,9 @@ class DungeonGame {
               pendingBossVictory == nil,
               !DungeonGame.isBoss(floor: currentFloor),
               currentFloor > 1 else { return }
+        // No random events during the first-session tutorial: a brand-new
+        // player is already learning greed, the pot, and the first camp.
+        guard TutorialStep.current == .done else { return }
         guard Double.random(in: 0...1) < 0.18 else { return }
         // Reroll up to 10 times to find an event the player can afford.
         for _ in 0..<10 {
@@ -1513,6 +1516,15 @@ class DungeonGame {
         heroHp = heroMaxHp
         onHeroHeal?(healed)
         log("⛩️ You drink the Holy Vial. HP fully restored (+\(healed)).")
+    }
+
+    /// First-run tutorial: hand out one guaranteed boss-tier (Uncommon+) item
+    /// early, so a new player sees loot — and the gear system — in minute one.
+    func grantTutorialDrop() {
+        if let drop = EquipmentDrop.rollBoss(floor: currentFloor) {
+            receiveDrop(drop)
+            log("🎁 Something glints in the rubble...")
+        }
     }
 
     private func receiveDrop(_ item: Equipment) {
