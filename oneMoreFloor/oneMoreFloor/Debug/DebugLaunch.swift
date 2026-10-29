@@ -14,8 +14,9 @@
 //
 // In Xcode: Edit Scheme → Run → Arguments → "Arguments Passed On Launch".
 //
-//   -debugRaid <floor>    Put the hero at <floor>'s rest site with 100 gold at
-//                         risk, so the Rest / Descend / Raid card is up.
+//   -debugRaid <floor>    Put the hero at the rest site after <floor>'s boss
+//                         (so on floor <floor>+1) with 100 gold at risk, with
+//                         the Rest / Descend / Raid card up. Use a boss floor: 10, 20, …
 //   -debugBlessings YES   Also grant War Surge, Thorn Mantle, and Blood Rush.
 
 #if DEBUG
@@ -31,9 +32,11 @@ extension DungeonGame {
         let raidFloor = args.integer(forKey: "debugRaid")
         guard raidFloor > 0 else { return }
 
-        currentFloor     = raidFloor
-        deepestFloor     = max(deepestFloor, raidFloor)
-        deepestFloorEver = max(deepestFloorEver, raidFloor)
+        // Match the real flow: beating floor N's boss advances to N+1, and the
+        // rest site appears there. (Staying on N would respawn the boss after.)
+        currentFloor     = raidFloor + 1
+        deepestFloor     = max(deepestFloor, raidFloor + 1)
+        deepestFloorEver = max(deepestFloorEver, raidFloor + 1)
         heroHp           = heroMaxHp
         atRiskGold       = 100
         isGameOver       = false

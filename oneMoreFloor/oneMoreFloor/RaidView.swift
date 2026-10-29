@@ -186,6 +186,15 @@ struct RaidView: View {
         }
     }
 
+    /// The failure screen's summary. Read before completeRaid() strips anything.
+    private var lossSummary: String {
+        let blessings = game.activeEffects.filter { $0.isBlessing }.count
+        var lines: [String] = []
+        if blessings > 0      { lines.append("\(blessings) blessing\(blessings == 1 ? "" : "s") lost.") }
+        if game.atRiskGold > 0 { lines.append("\(game.atRiskGold) at-risk gold forfeit.") }
+        return lines.isEmpty ? "You escape wounded." : lines.joined(separator: "\n")
+    }
+
     // MARK: - Result overlay
 
     @ViewBuilder
@@ -213,7 +222,9 @@ struct RaidView: View {
                         Text("+\(earned) Soul Shard\(earned == 1 ? "" : "s") earned!")
                             .foregroundStyle(Color.white.opacity(0.85))
                     } else {
-                        Text("All blessings lost.\nAt-risk gold forfeit.")
+                        // Only name what was actually lost (this used to claim
+                        // "All blessings lost" even when the hero had none).
+                        Text(lossSummary)
                             .foregroundStyle(Color.white.opacity(0.65))
                             .multilineTextAlignment(.center)
                     }

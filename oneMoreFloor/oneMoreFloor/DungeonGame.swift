@@ -163,6 +163,14 @@ class DungeonGame {
     // dungeon tick loop while RaidView runs the multi-enemy side combat.
     var isRaidActive: Bool = false
 
+    /// Set when a raid was abandoned by closing the app; GameView shows a one-time
+    /// alert explaining the loss, then clears it.
+    struct AbandonedRaid: Equatable {
+        let blessingsLost: Int
+        let goldLost: Int
+    }
+    var abandonedRaid: AbandonedRaid?
+
     // Auto-battle: when on, the game loop takes a turn for the player each tick
     // (hands-off grinding). Mirrored from the UI's @AppStorage toggle so the
     // long-lived game-loop task always reads a LIVE value — reading the view's
@@ -1655,6 +1663,10 @@ class DungeonGame {
         // v9 additions (optional for backwards compatibility)
         var greedMultiplier: Double?
         var atRiskGold: Int?
+        // v10 additions (optional for backwards compatibility): mid-decision
+        // state, so quitting can't skip a rest-site choice or escape a raid.
+        var pendingRestSite: Bool?
+        var isRaidActive: Bool?
     }
 
     private static let saveKey = "dungeonSave_v2"
@@ -1699,7 +1711,9 @@ class DungeonGame {
             retiredCharacterIDs: retiredCharacterIDs,
             totalPrestiges: totalPrestiges,
             greedMultiplier: greedMultiplier,
-            atRiskGold: atRiskGold
+            atRiskGold: atRiskGold,
+            pendingRestSite: pendingRestSite,
+            isRaidActive: isRaidActive
         )
         if let encoded = try? JSONEncoder().encode(data) {
             UserDefaults.standard.set(encoded, forKey: Self.saveKey)
@@ -1767,6 +1781,8 @@ class DungeonGame {
         totalPrestiges       = data.totalPrestiges       ?? 0
         greedMultiplier      = data.greedMultiplier      ?? 1.0
         atRiskGold           = data.atRiskGold           ?? 0
+        pendingRestSite      = data.pendingRestSite      ?? false
+        isRaidActive         = data.isRaidActive         ?? false
 
         displayMonsterHp    = inCombat ? max(0, monsterHp) : 0
         displayMonsterMaxHp = inCombat ? monsterMaxHp : 0
@@ -1864,10 +1880,31 @@ class DungeonGame {
     }
 
     func handleForeground() -> OfflineSummary? {
+        // Was a raid running in *this* session before we load? True only when the
+        // app was briefly backgrounded mid-raid (RaidView is still on screen).
+        // A fresh launch starts with no live raid, so a saved isRaidActive then
+        // means the app was closed mid-raid.
+        let raidWasLive = isRaidActive
         guard let savedAt = load() else { return nil }
+
+        if isRaidActive && !raidWasLive {
+            // Closed mid-raid (force-quit, or the system killed the app): the raid
+            // counts as lost. Otherwise quitting would be a free escape from a
+            // losing raid with the pot and blessings intact.
+            abandonedRaid = AbandonedRaid(
+                blessingsLost: activeEffects.filter { $0.isBlessing }.count,
+                goldLost: atRiskGold)
+            completeRaid(success: false, heroHpAfterRaid: 0)
+            log("🏳️ Raid abandoned — counted as a loss.")
+        }
+
         let elapsed = Date.now.timeIntervalSince(savedAt)
         save()
         guard elapsed > 10 else { return nil }
+        // A live raid just pauses while the app is away: no idle progress, and
+        // crucially no "make camp" auto-banking of the pot mid-raid (which was a
+        // second escape — background for 10s and your gold was safe).
+        guard !isRaidActive else { return nil }
         let summary = simulateOffline(seconds: elapsed)
         return summary.hasContent ? summary : nil
     }

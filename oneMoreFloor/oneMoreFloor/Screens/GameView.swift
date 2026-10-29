@@ -163,6 +163,15 @@ struct GameView: View {
                 .presentationDragIndicator(.visible)
                 .presentationSizing(.page)
         }
+        // One-time explanation when a raid was lost by closing the app mid-raid
+        // (see DungeonGame.handleForeground). Dismissing clears the notice.
+        .alert("Raid abandoned",
+               isPresented: Binding(get: { game.abandonedRaid != nil },
+                                    set: { if !$0 { game.abandonedRaid = nil } })) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(abandonedRaidMessage)
+        }
         .fullScreenCover(isPresented: $showIntro) {
             IntroCardView(onBegin: { seenIntro = true; showIntro = false })
         }
@@ -309,6 +318,16 @@ struct GameView: View {
                 }
             }
         }
+    }
+
+    /// What the abandoned-raid alert says it cost, skipping anything that was zero.
+    private var abandonedRaidMessage: String {
+        guard let lost = game.abandonedRaid else { return "" }
+        var costs: [String] = []
+        if lost.blessingsLost > 0 { costs.append("\(lost.blessingsLost) blessing\(lost.blessingsLost == 1 ? "" : "s")") }
+        if lost.goldLost > 0      { costs.append("\(lost.goldLost) gold") }
+        let cost = costs.isEmpty ? "" : " You lost " + costs.joined(separator: " and ") + "."
+        return "Leaving mid-raid counts as a loss." + cost
     }
 
     // True whenever any full-screen overlay is displayed, so the item drop banner stays hidden

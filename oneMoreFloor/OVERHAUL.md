@@ -156,8 +156,8 @@ Bugs — ✅ fixed (unit-tested in `oneMoreFloorTests/RaidTests.swift`):
 
 Raid playtest findings (2026-10-29, fresh Soldier, no upgrades, floor 10, full HP):
 - **Raids are close to unwinnable at their first opportunity.** No blessings: died mid-wave 1. All three special blessings: died early in wave 2. Rough math: three floor-10 skeletons (~43 HP, attacking every ~1.6s together) out-damage a 120-HP hero who kills one ~43-HP enemy every ~4–5s at 9 ATK. Raid enemies use full single-fight scaling but arrive 3–5 at a time. **Tuning knob to decide:** scale raid enemies down (e.g. ~50% HP / ~60% ATK of a normal floor enemy) or reduce counts. Blessings help (+1 wave), so the earlier worry that they'd make raids "easy" doesn't hold at this depth.
-- **Quit-to-escape exploit:** `isRaidActive` and `pendingRestSite` aren't saved. Force-quitting during a losing raid relaunches with the pot and blessings intact. Decide: resolve an interrupted raid as a loss on load (roguelike norm), or persist and resume it.
-- Copy: the failure screen says "All blessings lost" even when the hero had none.
+- [x] **Quit-to-escape exploits — fixed.** (1) `isRaidActive` / `pendingRestSite` weren't saved, so force-quitting a losing raid kept the pot and blessings. (2) Backgrounding 10s+ mid-raid ran the offline "make camp" sim, which banked the pot. Now both are saved (SaveData v10); a fresh launch with a saved raid resolves it as a loss and shows a "Raid abandoned" alert listing what was lost; a merely-backgrounded raid keeps running and skips the offline sim; a pending rest-site choice reappears after relaunch. Tested in `oneMoreFloorTests/SaveStateTests.swift` and verified in the simulator.
+- [x] The failure screen now lists only what was actually lost (it used to claim "All blessings lost" with none).
 
 Glow-up ideas (recommended order):
 - [ ] **Raid briefing** before committing: exact shard reward, stakes (blessing icons + pot), wave layout with boss silhouette, and a danger meter (hero power vs scaled enemies).
