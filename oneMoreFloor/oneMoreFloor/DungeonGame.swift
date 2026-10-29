@@ -1626,45 +1626,41 @@ class DungeonGame {
 
     // MARK: - Daily Quests
 
-    private static let questPool: [DailyQuest] = [
-        // Kill any
-        DailyQuest(id: "kill_15",   title: "Skirmisher",       description: "Slay 15 enemies",    type: .killAny,     goalCount: 15,   rewardGold: 35),
-        DailyQuest(id: "kill_30",   title: "Monster Slayer",   description: "Slay 30 enemies",    type: .killAny,     goalCount: 30,   rewardGold: 55),
-        DailyQuest(id: "kill_50",   title: "Fighter",          description: "Slay 50 enemies",    type: .killAny,     goalCount: 50,   rewardGold: 75),
-        DailyQuest(id: "kill_75",   title: "Relentless",       description: "Slay 75 enemies",    type: .killAny,     goalCount: 75,   rewardGold: 100),
-        DailyQuest(id: "kill_125",  title: "Unstoppable",      description: "Slay 125 enemies",   type: .killAny,     goalCount: 125,  rewardGold: 155),
-        DailyQuest(id: "kill_200",  title: "Berserker",        description: "Slay 200 enemies",   type: .killAny,     goalCount: 200,  rewardGold: 220),
-        DailyQuest(id: "kill_350",  title: "Warlord",          description: "Slay 350 enemies",   type: .killAny,     goalCount: 350,  rewardGold: 295),
-        // Kill boss
-        DailyQuest(id: "boss_1",    title: "First Blood",      description: "Defeat a boss",      type: .killBoss,    goalCount: 1,    rewardGold: 50),
-        DailyQuest(id: "boss_2",    title: "Boss Hunter",      description: "Defeat 2 bosses",    type: .killBoss,    goalCount: 2,    rewardGold: 80),
-        DailyQuest(id: "boss_5",    title: "Boss Crusher",     description: "Defeat 5 bosses",    type: .killBoss,    goalCount: 5,    rewardGold: 160),
-        DailyQuest(id: "boss_8",    title: "Boss Slayer",      description: "Defeat 8 bosses",    type: .killBoss,    goalCount: 8,    rewardGold: 240),
-        DailyQuest(id: "boss_12",   title: "Boss Breaker",     description: "Defeat 12 bosses",   type: .killBoss,    goalCount: 12,   rewardGold: 320),
-        // Earn gold
-        DailyQuest(id: "gold_100",  title: "Coin Collector",   description: "Earn 100 gold",      type: .earnGold,    goalCount: 100,  rewardGold: 35),
-        DailyQuest(id: "gold_300",  title: "Gold Seeker",      description: "Earn 300 gold",      type: .earnGold,    goalCount: 300,  rewardGold: 70),
-        DailyQuest(id: "gold_500",  title: "Wealth Seeker",    description: "Earn 500 gold",      type: .earnGold,    goalCount: 500,  rewardGold: 110),
-        DailyQuest(id: "gold_700",  title: "Fortune Hunter",   description: "Earn 700 gold",      type: .earnGold,    goalCount: 700,  rewardGold: 140),
-        DailyQuest(id: "gold_1200", title: "Treasure Hoarder", description: "Earn 1,200 gold",    type: .earnGold,    goalCount: 1200, rewardGold: 210),
-        DailyQuest(id: "gold_2000", title: "Gold Hoarder",     description: "Earn 2,000 gold",    type: .earnGold,    goalCount: 2000, rewardGold: 285),
-        // Clear floors
-        DailyQuest(id: "floors_10", title: "Floor Crawler",    description: "Clear 10 floors",    type: .clearFloors, goalCount: 10,   rewardGold: 35),
-        DailyQuest(id: "floors_20", title: "Dungeon Diver",    description: "Clear 20 floors",    type: .clearFloors, goalCount: 20,   rewardGold: 60),
-        DailyQuest(id: "floors_35", title: "Dungeon Runner",   description: "Clear 35 floors",    type: .clearFloors, goalCount: 35,   rewardGold: 90),
-        DailyQuest(id: "floors_50", title: "Deep Delver",      description: "Clear 50 floors",    type: .clearFloors, goalCount: 50,   rewardGold: 130),
-        DailyQuest(id: "floors_80", title: "Abyss Diver",      description: "Clear 80 floors",    type: .clearFloors, goalCount: 80,   rewardGold: 190),
-        DailyQuest(id: "floors_100",title: "Abyss Conqueror",  description: "Clear 100 floors",   type: .clearFloors, goalCount: 100,  rewardGold: 250),
-        // Reach floor
-        DailyQuest(id: "reach_5",   title: "Adventurer",       description: "Reach floor 5",      type: .reachFloor,  goalCount: 5,    rewardGold: 30),
-        DailyQuest(id: "reach_15",  title: "First Steps",      description: "Reach floor 15",     type: .reachFloor,  goalCount: 15,   rewardGold: 55),
-        DailyQuest(id: "reach_25",  title: "Dungeon Walker",   description: "Reach floor 25",     type: .reachFloor,  goalCount: 25,   rewardGold: 75),
-        DailyQuest(id: "reach_40",  title: "Depths Explorer",  description: "Reach floor 40",     type: .reachFloor,  goalCount: 40,   rewardGold: 110),
-        DailyQuest(id: "reach_50",  title: "Spelunker",        description: "Reach floor 50",     type: .reachFloor,  goalCount: 50,   rewardGold: 130),
-        DailyQuest(id: "reach_60",  title: "Abyss Walker",     description: "Reach floor 60",     type: .reachFloor,  goalCount: 60,   rewardGold: 170),
-        DailyQuest(id: "reach_80",  title: "Floor Master",     description: "Reach floor 80",     type: .reachFloor,  goalCount: 80,   rewardGold: 230),
-        DailyQuest(id: "reach_100", title: "Abyss Lord",       description: "Reach floor 100",    type: .reachFloor,  goalCount: 100,  rewardGold: 290),
+    // Three dailies a day — one easy, one medium, one stretch — instead of
+    // twelve. Twelve read as a chore list (and with "Reach floor 100" in the
+    // mix, the Daily Champion bonus was close to impossible). Three achievable
+    // goals is a nudge, not grind (engagement chart: "artificial grind" row).
+    // Goals that took many hours (350 kills, 12 bosses, 2,000 gold, floor 40+)
+    // are gone; they suit achievements, not dailies.
+
+    private static let easyQuests: [DailyQuest] = [
+        DailyQuest(id: "kill_15",   title: "Skirmisher",      description: "Slay 15 enemies",  type: .killAny,     goalCount: 15,  rewardGold: 35),
+        DailyQuest(id: "kill_30",   title: "Monster Slayer",  description: "Slay 30 enemies",  type: .killAny,     goalCount: 30,  rewardGold: 55),
+        DailyQuest(id: "gold_100",  title: "Coin Collector",  description: "Earn 100 gold",    type: .earnGold,    goalCount: 100, rewardGold: 35),
+        DailyQuest(id: "floors_10", title: "Floor Crawler",   description: "Clear 10 floors",  type: .clearFloors, goalCount: 10,  rewardGold: 35),
+        DailyQuest(id: "reach_5",   title: "Adventurer",      description: "Reach floor 5",    type: .reachFloor,  goalCount: 5,   rewardGold: 30),
+        DailyQuest(id: "boss_1",    title: "First Blood",     description: "Defeat a boss",    type: .killBoss,    goalCount: 1,   rewardGold: 50),
     ]
+    private static let mediumQuests: [DailyQuest] = [
+        DailyQuest(id: "kill_50",   title: "Fighter",         description: "Slay 50 enemies",  type: .killAny,     goalCount: 50,  rewardGold: 75),
+        DailyQuest(id: "kill_75",   title: "Relentless",      description: "Slay 75 enemies",  type: .killAny,     goalCount: 75,  rewardGold: 100),
+        DailyQuest(id: "gold_300",  title: "Gold Seeker",     description: "Earn 300 gold",    type: .earnGold,    goalCount: 300, rewardGold: 70),
+        DailyQuest(id: "gold_500",  title: "Wealth Seeker",   description: "Earn 500 gold",    type: .earnGold,    goalCount: 500, rewardGold: 110),
+        DailyQuest(id: "floors_20", title: "Dungeon Diver",   description: "Clear 20 floors",  type: .clearFloors, goalCount: 20,  rewardGold: 60),
+        DailyQuest(id: "boss_2",    title: "Boss Hunter",     description: "Defeat 2 bosses",  type: .killBoss,    goalCount: 2,   rewardGold: 80),
+        DailyQuest(id: "reach_15",  title: "First Steps",     description: "Reach floor 15",   type: .reachFloor,  goalCount: 15,  rewardGold: 55),
+    ]
+    private static let stretchQuests: [DailyQuest] = [
+        DailyQuest(id: "kill_125",  title: "Unstoppable",     description: "Slay 125 enemies", type: .killAny,     goalCount: 125, rewardGold: 155),
+        DailyQuest(id: "kill_200",  title: "Berserker",       description: "Slay 200 enemies", type: .killAny,     goalCount: 200, rewardGold: 220),
+        DailyQuest(id: "gold_700",  title: "Fortune Hunter",  description: "Earn 700 gold",    type: .earnGold,    goalCount: 700, rewardGold: 140),
+        DailyQuest(id: "floors_35", title: "Dungeon Runner",  description: "Clear 35 floors",  type: .clearFloors, goalCount: 35,  rewardGold: 90),
+        DailyQuest(id: "boss_5",    title: "Boss Crusher",    description: "Defeat 5 bosses",  type: .killBoss,    goalCount: 5,   rewardGold: 160),
+        DailyQuest(id: "reach_25",  title: "Dungeon Walker",  description: "Reach floor 25",   type: .reachFloor,  goalCount: 25,  rewardGold: 75),
+    ]
+
+    /// Every quest a day can draw from, easiest tier first.
+    static var questTiers: [[DailyQuest]] { [easyQuests, mediumQuests, stretchQuests] }
 
     static func todayDateKey() -> String {
         let f = DateFormatter()
@@ -1678,16 +1674,23 @@ class DungeonGame {
         return parts[0] * 10000 + parts[1] * 100 + parts[2]
     }
 
+    /// Today's three dailies: one from each tier, chosen deterministically from
+    /// the date (same three all day, even across relaunches, so saved progress
+    /// lines up by id). Each pick avoids a quest type already chosen, so a day
+    /// is never "kill 15 / kill 50 / kill 200".
     static func selectQuestsForDay(_ dayKey: String) -> [DailyQuest] {
-        let pool = questPool
         var seed = questSeed(for: dayKey)
-        var indices: [Int] = []
-        while indices.count < min(12, pool.count) {
+        var picked: [DailyQuest] = []
+        for tier in questTiers {
             seed = seed &* 1664525 &+ 1013904223
-            let idx = ((seed % pool.count) + pool.count) % pool.count
-            if !indices.contains(idx) { indices.append(idx) }
+            let start = ((seed % tier.count) + tier.count) % tier.count
+            // Walk the tier from the seeded start to the first unused type.
+            let choice = (0..<tier.count)
+                .map { tier[(start + $0) % tier.count] }
+                .first { q in !picked.contains { $0.type == q.type } } ?? tier[start]
+            picked.append(choice)
         }
-        return indices.map { pool[$0] }
+        return picked
     }
 
     private func checkAndRefreshDailyQuests() {

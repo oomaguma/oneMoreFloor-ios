@@ -140,7 +140,7 @@ The smallest change that fixes the dead first session. Ship it, watch D1/D7 move
 - [x] Quests → claimable first / claimed last, icon tile per quest type, gold progress bars, pulsing chunky CLAIM; Daily Champion moved to the top as a bonus card. Fixed: its progress bar always drew full — now claimed / total.
 - [ ] Hand-polish still pending: Settings, Store, map (token-migrated only).
 - [x] PRESTIGE now asks for confirmation (it resets the run; Retire already did).
-- [ ] **Design flag:** the daily quest list shows up to 12 quests, incl. "Reach floor 100" as a daily — 3 achievable dailies is the healthier norm.
+- [x] **Dailies cut from 12 to 3** (2026-10-29): one easy, one medium, one stretch per day (`DungeonGame.questTiers`), chosen deterministically from the date with no repeated quest type. Multi-hour goals (350 kills, 12 bosses, 2,000 gold, floor 40+) were removed from the daily pool. Daily Champion is now "claim all 3" (still 20 ◈). Covered by `oneMoreFloorTests/DailyQuestTests.swift` across every day of 2026. Note: on update day, players mid-day see their list change once (old ids drop out).
 - [ ] Pixel display font (OFL) — swap `Theme.Fonts.display` to `.custom(...)`; needs the font file added to the bundle.
 - [ ] Merge Upgrades + Items into one "Hero" tab; hide Prestige until it unlocks.
 
