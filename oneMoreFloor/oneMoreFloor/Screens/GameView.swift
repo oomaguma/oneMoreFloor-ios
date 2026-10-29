@@ -173,6 +173,12 @@ struct GameView: View {
             if let summary = game.handleForeground() {
                 offlineSummary = summary
             }
+            #if DEBUG
+            // QA shortcuts (-debugRaid / -debugBlessings) — see Debug/DebugLaunch.swift.
+            // Applied after the offline sim so it can't immediately undo them.
+            game.applyDebugLaunchArguments()
+            if UserDefaults.standard.integer(forKey: "debugRaid") > 0 { offlineSummary = nil }
+            #endif
             combatScene.updateZoneBackground(game.currentZone.id)
             if let enemy = game.currentEnemyType {
                 combatScene.updateEnemy(enemy)

@@ -444,11 +444,9 @@ class RaidScene: SKScene {
         }
 
         // War Surge: splash part of the strike onto the next-closest enemy in range.
-        if splashFraction > 0,
-           let neighbor = raidEnemies
-               .filter({ $0 !== enemy && !$0.isDead && $0.node.position.x <= heroHitRange })
-               .min(by: { $0.node.position.x < $1.node.position.x }) {
-            let splash = max(1, Int(Double(dmg) * splashFraction))
+        let splash = BlessingCombat.splashDamage(strike: dmg, fraction: splashFraction)
+        if splash > 0,
+           let neighbor = Self.splashTarget(after: enemy, among: raidEnemies, hitRange: heroHitRange) {
             neighbor.hp -= splash
             floatText("-\(splash)",
                       at: CGPoint(x: neighbor.node.position.x + 6, y: neighbor.node.position.y + 20),
@@ -463,10 +461,19 @@ class RaidScene: SKScene {
         }
     }
 
+    /// War Surge's second target: the closest living enemy in range that isn't
+    /// the one just struck. Static and state-free so unit tests can drive it.
+    static func splashTarget(after struck: RaidEnemy, among enemies: [RaidEnemy],
+                             hitRange: CGFloat) -> RaidEnemy? {
+        enemies
+            .filter { $0 !== struck && !$0.isDead && $0.node.position.x <= hitRange }
+            .min { $0.node.position.x < $1.node.position.x }
+    }
+
     /// Blood Rush: each kill restores a share of max HP (same formula as the dungeon).
     private func healOnKill() {
-        guard killHealFraction > 0, heroHp > 0 else { return }
-        let heal = max(1, Int(Double(heroMaxHp) * killHealFraction))
+        let heal = BlessingCombat.killHeal(maxHp: heroMaxHp, fraction: killHealFraction)
+        guard heal > 0, heroHp > 0 else { return }
         heroHp = min(heroMaxHp, heroHp + heal)
         onHeroHpChanged?(heroHp, heroMaxHp)
         floatText("+\(heal)", at: CGPoint(x: 44, y: 84),
@@ -502,8 +509,9 @@ class RaidScene: SKScene {
 
         // Thorn Mantle: reflect part of the hit back. Like the dungeon version it
         // can't land the killing blow — it stops at 1 HP.
-        if thornsFraction > 0, enemy.hp > 1 {
-            let reflected = min(enemy.hp - 1, max(1, Int(Double(dmg) * thornsFraction)))
+        let reflected = BlessingCombat.thornsReflect(incoming: dmg, fraction: thornsFraction,
+                                                     attackerHp: enemy.hp)
+        if reflected > 0 {
             enemy.hp -= reflected
             enemy.syncHpBar()
         }

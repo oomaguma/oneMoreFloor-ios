@@ -85,8 +85,8 @@ struct RaidTests {
             ActiveEffect(name: "Thorn Mantle", icon: "🌿",  isBlessing: true, thornsDamagePercent: 0.20),
             ActiveEffect(name: "Blood Rush",   icon: "❤️‍🔥", isBlessing: true, onKillHealPercent: 0.08),
         ]
-        #expect(game.raidSplashFraction == 0.40)
-        #expect(game.raidThornsFraction == 0.20)
-        #expect(game.raidKillHealFraction == 0.08)
+        #expect(game.splashFraction == 0.40)
+        #expect(game.thornsFraction == 0.20)
+        #expect(game.killHealFraction == 0.08)
     }
 }

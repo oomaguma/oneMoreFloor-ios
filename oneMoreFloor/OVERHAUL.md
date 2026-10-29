@@ -151,7 +151,13 @@ Bugs — ✅ fixed (unit-tested in `oneMoreFloorTests/RaidTests.swift`):
 - [x] A win silently restored pre-raid HP (raid damage lived only in `RaidScene`). `completeRaid(success:heroHpAfterRaid:)` now carries it back, clamped to 1…max.
 - [x] Blessing special effects were ignored in raids — War Surge (splash, labelled "raid only") did nothing anywhere. `RaidScene` now applies War Surge splash, Thorn Mantle reflection, and Blood Rush kill-heals with the dungeon's formulas.
 - [x] Raid crits used the class base chance; now `game.heroCritChance` (includes the legacy bonus).
-- *Not yet seen on screen:* the scene-side effects (splash/thorns/kill-heal) are covered by code review only — test runs kept dying at the floor-10 boss before reaching a rest site.
+- [x] Blessing formulas now live once in `BlessingCombat` (FloorEvents.swift), shared by dungeon and raid combat, with unit tests in `oneMoreFloorTests/BlessingCombatTests.swift` (incl. War Surge target selection via `RaidScene.splashTarget`).
+- [x] Seen in the simulator via the new DEBUG launch arguments (`Debug/DebugLaunch.swift`: `-debugRaid <floor>`, `-debugBlessings YES`): War Surge splash numbers visibly land on a second enemy.
+
+Raid playtest findings (2026-10-29, fresh Soldier, no upgrades, floor 10, full HP):
+- **Raids are close to unwinnable at their first opportunity.** No blessings: died mid-wave 1. All three special blessings: died early in wave 2. Rough math: three floor-10 skeletons (~43 HP, attacking every ~1.6s together) out-damage a 120-HP hero who kills one ~43-HP enemy every ~4–5s at 9 ATK. Raid enemies use full single-fight scaling but arrive 3–5 at a time. **Tuning knob to decide:** scale raid enemies down (e.g. ~50% HP / ~60% ATK of a normal floor enemy) or reduce counts. Blessings help (+1 wave), so the earlier worry that they'd make raids "easy" doesn't hold at this depth.
+- **Quit-to-escape exploit:** `isRaidActive` and `pendingRestSite` aren't saved. Force-quitting during a losing raid relaunches with the pot and blessings intact. Decide: resolve an interrupted raid as a loss on load (roguelike norm), or persist and resume it.
+- Copy: the failure screen says "All blessings lost" even when the hero had none.
 
 Glow-up ideas (recommended order):
 - [ ] **Raid briefing** before committing: exact shard reward, stakes (blessing icons + pot), wave layout with boss silhouette, and a danger meter (hero power vs scaled enemies).

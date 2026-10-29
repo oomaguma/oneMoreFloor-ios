@@ -587,11 +587,12 @@ class DungeonGame {
     /// floor/5, the payout was floor/3), so the player was told the wrong number.
     var raidShardReward: Int { max(5, currentFloor / 3) }
 
-    /// Blessing special effects, summed across stacks, handed to RaidScene so
-    /// "carry your blessings into the raid" covers more than flat stat mods.
-    var raidSplashFraction:   Double { activeEffects.reduce(0.0) { $0 + $1.splashDamagePercent } }
-    var raidThornsFraction:   Double { activeEffects.reduce(0.0) { $0 + $1.thornsDamagePercent } }
-    var raidKillHealFraction: Double { activeEffects.reduce(0.0) { $0 + $1.onKillHealPercent } }
+    /// Blessing special effects, summed across stacks. Used by dungeon combat and
+    /// handed to RaidScene, so "carry your blessings into the raid" covers more
+    /// than flat stat mods. Formulas live in `BlessingCombat`.
+    var splashFraction:   Double { activeEffects.reduce(0.0) { $0 + $1.splashDamagePercent } }
+    var thornsFraction:   Double { activeEffects.reduce(0.0) { $0 + $1.thornsDamagePercent } }
+    var killHealFraction: Double { activeEffects.reduce(0.0) { $0 + $1.onKillHealPercent } }
 
     func launchRaid() {
         pendingRestSite = false
@@ -754,9 +755,8 @@ class DungeonGame {
 
             // Blood Rush: each active effect with onKillHealPercent > 0 restores
             // a fraction of max HP. Multiple stacks add together before rounding.
-            let killHealFraction = activeEffects.reduce(0.0) { $0 + $1.onKillHealPercent }
-            if killHealFraction > 0 {
-                let healAmt = max(1, Int(Double(heroMaxHp) * killHealFraction))
+            let healAmt = BlessingCombat.killHeal(maxHp: heroMaxHp, fraction: killHealFraction)
+            if healAmt > 0 {
                 heroHp = min(heroMaxHp, heroHp + healAmt)
                 onHeroHeal?(healAmt)
                 log("❤️‍🔥 Blood Rush: +\(healAmt) HP!")
@@ -819,9 +819,9 @@ class DungeonGame {
             // Thorn Mantle: reflect a portion of the incoming damage back to the
             // monster. Capped at max(1, monsterHp - 1) so thorns can't deal the
             // killing blow — the hero finishes the job on their next strike.
-            let thornsFraction = activeEffects.reduce(0.0) { $0 + $1.thornsDamagePercent }
-            if thornsFraction > 0, monsterHp > 1 {
-                let reflected = min(monsterHp - 1, max(1, Int(Double(dmg) * thornsFraction)))
+            let reflected = BlessingCombat.thornsReflect(incoming: dmg, fraction: thornsFraction,
+                                                         attackerHp: monsterHp)
+            if reflected > 0 {
                 monsterHp -= reflected
                 displayMonsterHp = max(0, monsterHp)
                 log("🌿 Thorns reflect \(reflected) damage!")

@@ -42,9 +42,9 @@ struct RaidView: View {
             zoneID:   game.currentZone.id,
             floor:    game.currentFloor,
             critChance:       game.heroCritChance,
-            splashFraction:   game.raidSplashFraction,
-            thornsFraction:   game.raidThornsFraction,
-            killHealFraction: game.raidKillHealFraction
+            splashFraction:   game.splashFraction,
+            thornsFraction:   game.thornsFraction,
+            killHealFraction: game.killHealFraction
         ))
     }
 
