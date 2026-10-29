@@ -357,6 +357,9 @@ struct PrestigeRowView: View {
     let onRetireHero: () -> Void
 
     @State private var showRetireConfirm = false
+    // Prestige wipes the current run, so it gets the same "are you sure?"
+    // step as Retire. One tap on a big purple button shouldn't end a run.
+    @State private var showPrestigeConfirm = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -377,7 +380,7 @@ struct PrestigeRowView: View {
                 HStack(spacing: 10) {
                     // Prestige: reset the run, cash the climb in for soul shards.
                     Button {
-                        game.prestige()
+                        showPrestigeConfirm = true
                     } label: {
                         Text("PRESTIGE  +\(game.prestigeShardValue()) ◈")
                             .font(Theme.Fonts.display(15))
@@ -406,6 +409,12 @@ struct PrestigeRowView: View {
         .padding(.vertical, 14)
         .gamePanel(tint: game.canPrestige() ? Color(red: 0.55, green: 0.35, blue: 0.90) : Theme.Palette.stoneEdge,
                    cornerRadius: 16)
+        .alert("Prestige for \(game.prestigeShardValue()) ◈?", isPresented: $showPrestigeConfirm) {
+            Button("Prestige", role: .destructive) { game.prestige() }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Your run restarts at floor 1. Soul shards, prestige upgrades, gear, and your best floor are kept.")
+        }
         .alert("Retire \(game.character.name)?", isPresented: $showRetireConfirm) {
             Button("Retire", role: .destructive) { onRetireHero() }
             Button("Cancel", role: .cancel) { }
