@@ -34,8 +34,8 @@ final class RaidEnemy {
     let hpBarBg:   SKSpriteNode
     let hpBarFill: SKSpriteNode
 
-    static let barWidth:  CGFloat = 26
-    static let barHeight: CGFloat = 3
+    static let barWidth:  CGFloat = 30
+    static let barHeight: CGFloat = 4
     // How far above the enemy center the bar floats (in scene units).
     static let barYOffset: CGFloat = 24
 
@@ -107,6 +107,15 @@ class RaidScene: SKScene {
     var onWaveChanged: ((Int, Int) -> Void)?
     /// Fired when all waves are cleared (true) or the hero falls (false).
     var onRaidCompleted: ((Bool) -> Void)?
+    /// Fired when a wave's enemies start walking in — (wave, total, is it the boss wave).
+    var onWaveStarted: ((Int, Int, Bool) -> Void)?
+    /// Fired when a non-final wave is cleared. The scene then waits for
+    /// `continueToNextWave()` (press on) — or the view escapes the raid.
+    var onWaveCleared: ((Int, Int) -> Void)?
+    /// Fired each time the hero takes a hit (drives the red edge flash).
+    var onHeroHurt: (() -> Void)?
+    /// Fired on a critical strike (drives the screen shake).
+    var onHeroCrit: (() -> Void)?
 
     // MARK: - Immutable hero config
 
@@ -126,6 +135,36 @@ class RaidScene: SKScene {
     private let splashFraction:   Double   // War Surge: share of each strike that hits a second enemy
     private let thornsFraction:   Double   // Thorn Mantle: share of incoming damage reflected
     private let killHealFraction: Double   // Blood Rush: share of max HP restored per kill
+
+    // MARK: - Layout model
+    //
+    // Same approach as CombatScene: the fight is authored in a fixed design
+    // space (250 wide — enemies spawn at x 290, just off the right edge, and
+    // walk in), and every gameplay node lives in `world`, which is scaled to
+    // the view's width. The zone backdrop fills the view outside `world`, with
+    // its floor band under the fighters' feet. This is what lets the raid run
+    // full-bleed instead of in a 300×160 letterbox.
+
+    private let world = SKNode()
+    private static let designWidth: CGFloat = 250
+    private static let designFeetY: CGFloat = 26      // sprite feet in design space (y ≈ 62 centers)
+    private static let floorBand:   CGFloat = 0.28    // backdrop floor = bottom 28% of each bg image
+
+    // MARK: - Focus target (tap an enemy to attack it first)
+
+    private weak var focusTarget: RaidEnemy?
+    private let focusRing: SKShapeNode = {
+        let ring = SKShapeNode(ellipseOf: CGSize(width: 30, height: 9))
+        ring.strokeColor = UIColor(red: 1.0, green: 0.80, blue: 0.28, alpha: 0.95)
+        ring.lineWidth   = 1.5
+        ring.fillColor   = UIColor(red: 1.0, green: 0.80, blue: 0.28, alpha: 0.18)
+        ring.zPosition   = -1
+        ring.isHidden    = true
+        return ring
+    }()
+
+    /// True between a cleared wave and the player's Escape / Press On choice.
+    private(set) var isAwaitingDecision = false
 
     // MARK: - Tuning knobs (first draft, 2026-10-29 — tune in playtest)
     //
@@ -213,7 +252,8 @@ class RaidScene: SKScene {
         // Wider aspect ratio than the 1v1 CombatScene — we need horizontal room
         // for enemies walking in from the right side.
         super.init(size: CGSize(width: 300, height: 160))
-        scaleMode       = .aspectFill
+        // resizeFill: the scene tracks the view's size; layoutForSize() fits it.
+        scaleMode       = .resizeFill
         backgroundColor = .clear
     }
 
@@ -228,19 +268,20 @@ class RaidScene: SKScene {
         let bgTex = SKTexture(imageNamed: "bg_\(zoneID)")
         bgTex.filteringMode = .nearest
         bgNode = SKSpriteNode(texture: bgTex)
-        bgNode.position         = CGPoint(x: 150, y: 80)
-        bgNode.size             = CGSize(width: 400, height: 400 * 160.0 / 300.0)
+        bgNode.anchorPoint      = CGPoint(x: 0.5, y: 0)   // sized in layoutForSize()
         bgNode.zPosition        = -10
         bgNode.color            = .black
         bgNode.colorBlendFactor = 0.45
         addChild(bgNode)
+        addChild(world)
+        world.addChild(focusRing)
 
         // Hero — planted on the left side, facing right (positive xScale).
         loadHeroFrames()
         heroNode = SKSpriteNode(texture: heroIdleFrames.first)
         heroNode.setScale(2.2)
         heroNode.position = CGPoint(x: 45, y: 62)
-        addChild(heroNode)
+        world.addChild(heroNode)
         heroNode.run(
             .repeatForever(.animate(with: heroIdleFrames, timePerFrame: 0.12)),
             withKey: "anim"
@@ -257,13 +298,37 @@ class RaidScene: SKScene {
         rangeLine.lineWidth     = 1
         rangeLine.zPosition     = 5
         rangeLine.isAntialiased = false
-        addChild(rangeLine)
+        world.addChild(rangeLine)
+        layoutForSize()
 
         // Brief dramatic pause before enemies charge in.
         run(.sequence([
             .wait(forDuration: 0.7),
             .run { [weak self] in self?.startNextWave() }
         ]))
+    }
+
+    // MARK: - Layout
+
+    override func didChangeSize(_ oldSize: CGSize) {
+        super.didChangeSize(oldSize)
+        layoutForSize()
+    }
+
+    /// Fit the design space to the view: backdrop aspect-fills (anchored at the
+    /// bottom), `world` spans the width (capped on short/wide views), and the
+    /// fighters' feet stand inside the backdrop's floor band.
+    private func layoutForSize() {
+        guard let bgNode, size.width > 0, size.height > 0 else { return }
+        let bgHeight = max(size.height, size.width * 270.0 / 480.0)
+        bgNode.size     = CGSize(width: bgHeight * 480.0 / 270.0, height: bgHeight)
+        bgNode.position = CGPoint(x: size.width / 2, y: 0)
+
+        let k = min(size.width / Self.designWidth, size.height / 130)
+        world.setScale(k)
+        let feetY = bgHeight * Self.floorBand * 0.45
+        world.position = CGPoint(x: (size.width - Self.designWidth * k) / 2,
+                                 y: feetY - Self.designFeetY * k)
     }
 
     // MARK: - Frame loading
@@ -283,11 +348,8 @@ class RaidScene: SKScene {
         raidEnemies.forEach { $0.hpBarBg.removeFromParent() }
         raidEnemies = []
         onWaveChanged?(wave, totalWaves)
-
-        floatText("WAVE \(wave)",
-                  at: CGPoint(x: 150, y: 105),
-                  color: UIColor(red: 0.95, green: 0.78, blue: 0.15, alpha: 1),
-                  fontSize: 20)
+        // The SwiftUI layer shows the big "WAVE 2" / "BOSS WAVE" banner.
+        onWaveStarted?(wave, totalWaves, wave == totalWaves)
 
         let pool     = DungeonGame.zoneEnemyPools[zoneID] ?? [EnemyType.skeleton]
         let bossType = DungeonGame.zoneBossEnemies[zoneID]
@@ -318,8 +380,8 @@ class RaidScene: SKScene {
 
             let yPos: CGFloat = 62 + yOffsets[i % yOffsets.count]
             enemy.node.position = CGPoint(x: 290, y: yPos)
-            addChild(enemy.node)
-            addChild(enemy.hpBarBg)
+            world.addChild(enemy.node)
+            world.addChild(enemy.hpBarBg)
             enemy.syncHpBar()
 
             enemy.node.run(
@@ -368,6 +430,14 @@ class RaidScene: SKScene {
         for enemy in raidEnemies where !enemy.isDead {
             enemy.syncHpBar()
         }
+        // The focus ring follows its enemy and disappears when it dies.
+        if let target = focusTarget, !target.isDead {
+            focusRing.isHidden = false
+            focusRing.position = CGPoint(x: target.node.position.x, y: target.node.position.y - 24)
+        } else {
+            focusTarget = nil
+            focusRing.isHidden = true
+        }
 
         // Hero auto-attack countdown.
         // We only reset the timer (and swing) when an in-range target exists.
@@ -404,8 +474,22 @@ class RaidScene: SKScene {
     /// auto-attack timer resets. If nothing is in range yet, the hero plays
     /// the swing animation but shows "TOO FAR" — clear feedback that the player
     /// needs to wait for enemies to advance before they can be struck.
-    func playerTap() {
+    /// `viewPoint` is where the finger landed in the SpriteView (SwiftUI's
+    /// top-left origin). Tapping on or near an enemy focuses it: the hero hits
+    /// that one first (when it's in range) until it dies or you pick another.
+    func playerTap(atViewPoint viewPoint: CGPoint? = nil) {
         guard !isRaidOver, !heroIsDeathPlaying else { return }
+        if let viewPoint {
+            // Flip to SpriteKit's bottom-left origin, then into world space.
+            let scenePoint = CGPoint(x: viewPoint.x, y: size.height - viewPoint.y)
+            let worldPoint = world.convert(scenePoint, from: self)
+            if let tapped = raidEnemies
+                .filter({ !$0.isDead && hypot($0.node.position.x - worldPoint.x,
+                                               $0.node.position.y - worldPoint.y) < 36 })
+                .min(by: { abs($0.node.position.x - worldPoint.x) < abs($1.node.position.x - worldPoint.x) }) {
+                focusTarget = tapped
+            }
+        }
         let hasInRange = raidEnemies.contains(where: {
             !$0.isDead && $0.node.position.x <= heroHitRange
         })
@@ -425,9 +509,9 @@ class RaidScene: SKScene {
         // Enemies still walking in from x=290 are silently skipped — the hero
         // physically can't reach them yet. Of those in range, pick the leftmost
         // (closest to the hero) to prioritise the most immediate threat.
-        guard let target = raidEnemies
-            .filter({ !$0.isDead && $0.node.position.x <= heroHitRange })
-            .min(by: { $0.node.position.x < $1.node.position.x })
+        let inRange = raidEnemies.filter { !$0.isDead && $0.node.position.x <= heroHitRange }
+        let focused = focusTarget.flatMap { f in inRange.first { $0 === f } }
+        guard let target = focused ?? inRange.min(by: { $0.node.position.x < $1.node.position.x })
         else { return }
 
         playHeroAttack()
@@ -455,8 +539,10 @@ class RaidScene: SKScene {
         let hitPos = CGPoint(x: enemy.node.position.x + 6, y: enemy.node.position.y + 20)
 
         if isCrit {
-            floatText("⚡\(dmg)", at: hitPos,
-                      color: UIColor(red: 1.0, green: 0.88, blue: 0.12, alpha: 1), fontSize: 15)
+            floatText("\(dmg)!", at: hitPos,
+                      color: UIColor(red: 1.0, green: 0.88, blue: 0.12, alpha: 1), fontSize: 16)
+            hitStop(0.07)
+            onHeroCrit?()
         } else {
             floatText("-\(dmg)", at: hitPos,
                       color: UIColor(red: 1.0, green: 0.60, blue: 0.15, alpha: 1))
@@ -533,6 +619,7 @@ class RaidScene: SKScene {
         floatText("-\(dmg)", at: CGPoint(x: 44, y: 78),
                   color: UIColor(red: 1.0, green: 0.28, blue: 0.28, alpha: 1))
         playHeroHurt()
+        onHeroHurt?()
 
         // Thorn Mantle: reflect part of the hit back. Like the dungeon version it
         // can't land the killing blow — it stops at 1 HP.
@@ -569,10 +656,45 @@ class RaidScene: SKScene {
             onHeroHpChanged?(heroHp, heroMaxHp)
             floatText("+\(heal)", at: CGPoint(x: 44, y: 84),
                       color: UIColor(red: 0.20, green: 0.90, blue: 0.38, alpha: 1))
+            // Push-your-luck beat: pause and let the player escape with a share
+            // of the reward, or press on (see continueToNextWave()).
+            isAwaitingDecision = true
+            let cleared = wave
             run(.sequence([
-                .wait(forDuration: 1.8),
-                .run { [weak self] in self?.startNextWave() }
+                .wait(forDuration: 0.9),
+                .run { [weak self] in self?.onWaveCleared?(cleared, self?.totalWaves ?? 3) }
             ]))
+        }
+    }
+
+    // MARK: - Between-wave decision
+
+    /// Press on: start the next wave after a short beat.
+    func continueToNextWave() {
+        guard isAwaitingDecision, !isRaidOver else { return }
+        isAwaitingDecision = false
+        run(.sequence([
+            .wait(forDuration: 0.5),
+            .run { [weak self] in self?.startNextWave() }
+        ]))
+    }
+
+    /// Escape: stop the raid here. DungeonGame.escapeRaid() pays out; this just
+    /// freezes the scene so nothing else happens behind the result screen.
+    func endForEscape() {
+        guard isAwaitingDecision else { return }
+        isAwaitingDecision = false
+        isRaidOver = true
+    }
+
+    // MARK: - Hit-stop
+
+    /// Freeze the scene for a few frames on a big hit (same trick as CombatScene).
+    private func hitStop(_ duration: TimeInterval) {
+        guard !isPaused else { return }
+        isPaused = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            self?.isPaused = false
         }
     }
 
@@ -690,13 +812,16 @@ class RaidScene: SKScene {
 
     private func floatText(_ text: String, at base: CGPoint,
                             color: UIColor, fontSize: CGFloat = 13) {
-        let label = SKLabelNode(fontNamed: "Courier-Bold")
-        label.text      = text
-        label.fontSize  = fontSize
-        label.fontColor = color
+        // Heavy outlined numbers so they read over the busy pixel backdrop.
+        let font  = UIFont(name: "AvenirNext-Heavy", size: fontSize) ?? .boldSystemFont(ofSize: fontSize)
+        let label = SKLabelNode()
+        label.attributedText = NSAttributedString(string: text, attributes: [
+            .font: font, .foregroundColor: color,
+            .strokeColor: UIColor.black, .strokeWidth: -5.0
+        ])
         label.position  = base
         label.zPosition = 20
-        addChild(label)
+        world.addChild(label)
 
         let up   = SKAction.moveBy(x: 0, y: 32, duration: 0.80)
         let fade = SKAction.sequence([.wait(forDuration: 0.22), .fadeOut(withDuration: 0.58)])

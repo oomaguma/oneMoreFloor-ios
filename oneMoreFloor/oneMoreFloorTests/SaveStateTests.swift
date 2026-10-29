@@ -48,6 +48,8 @@ struct SaveStateTests {
         #expect(relaunched.atRiskGold == 0)
         #expect(relaunched.activeEffects.isEmpty)
         #expect(relaunched.abandonedRaid == DungeonGame.AbandonedRaid(blessingsLost: 1, goldLost: 80))
+        // The alert explains it — no raid result screen should be left up.
+        #expect(relaunched.raidOutcome == nil)
     }
 
     @Test func backgroundingMidRaidKeepsTheRaidGoing() {

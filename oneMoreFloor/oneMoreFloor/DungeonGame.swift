@@ -593,7 +593,80 @@ class DungeonGame {
     /// Soul shards a won raid pays out. The single source of truth for both the
     /// payout and the result screen — they used to disagree (the screen showed
     /// floor/5, the payout was floor/3), so the player was told the wrong number.
-    var raidShardReward: Int { max(5, currentFloor / 3) }
+    /// Greed multiplies it, so a raid launched from a greedy descent pays more —
+    /// raids are part of the push-your-luck loop, not a side activity.
+    var raidShardReward: Int {
+        Int((Double(max(5, currentFloor / 3)) * greedMultiplier).rounded())
+    }
+
+    /// Share of the full reward you keep by escaping after wave 1 / wave 2.
+    /// Escaping keeps your blessings and pot; pressing on risks both for the rest.
+    static let raidEscapeShare: [Int: Double] = [1: 0.25, 2: 0.50]
+
+    /// Soul shards for escaping after `wavesCleared` waves (0 if you can't escape yet).
+    func raidEscapeReward(wavesCleared: Int) -> Int {
+        guard let share = Self.raidEscapeShare[wavesCleared] else { return 0 }
+        return max(1, Int((Double(raidShardReward) * share).rounded()))
+    }
+
+    // MARK: - Raid danger (briefing)
+
+    /// How a raid stacks up against the hero *on auto-attack*, for the briefing
+    /// card. A rough closed-form estimate (Tools/raid_balance_sim.py is the
+    /// careful version): damage the hero would take killing each wave's enemies
+    /// one by one, minus breather heals, compared to current HP.
+    enum RaidDanger: String {
+        case low = "LOW", moderate = "MODERATE", high = "HIGH", deadly = "DEADLY"
+    }
+
+    var raidDangerRatio: Double {
+        let zoneID = currentZone.id
+        let pool   = DungeonGame.zoneEnemyPools[zoneID] ?? [.skeleton]
+        let floor  = currentFloor
+        // Average raid-scaled enemy for this zone and floor.
+        let avgHp  = Double(pool.map { RaidScene.raidScaled($0.scaledHp(floor: floor, isBoss: false),  by: RaidScene.enemyHpScale) }.reduce(0, +)) / Double(pool.count)
+        let avgAtk = Double(pool.map { RaidScene.raidScaled($0.scaledAtk(floor: floor, isBoss: false), by: RaidScene.enemyAtkScale) }.reduce(0, +)) / Double(pool.count)
+        let atk    = Double(max(1, heroAtk))
+        let killTime = (avgHp / atk).rounded(.up) * 0.9                // auto swing every 0.9s
+        let enemyDps = max(1, avgAtk - Double(heroDef)) / 1.6           // each living enemy
+        var damage = 0.0
+        for wave in 1...3 {
+            let n = Double(RaidScene.enemyCount(wave: wave))
+            damage += enemyDps * killTime * n * (n + 1) / 2              // enemies fall one at a time
+        }
+        damage -= 2 * Double(RaidScene.raidScaled(heroMaxHp, by: RaidScene.breatherHealFraction))
+        return max(0, damage) / Double(max(1, heroHp))
+    }
+
+    var raidDanger: RaidDanger {
+        switch raidDangerRatio {
+        case ..<0.6: return .low
+        case ..<1.0: return .moderate
+        case ..<1.6: return .high
+        default:     return .deadly
+        }
+    }
+
+    // MARK: - Raid outcome
+
+    /// How the last raid ended, for RaidView's result screen. The raid is
+    /// resolved (rewards paid / penalties applied) the moment it ends — not when
+    /// the player taps Continue — so closing the app on the result screen can't
+    /// be mistaken for abandoning a raid. Not saved: it's display-only.
+    struct RaidOutcome: Equatable {
+        enum Kind: Equatable { case cleared, escaped(afterWave: Int), lost }
+        let kind: Kind
+        let shards: Int
+        let loot: Equipment?
+        let blessingsLost: Int
+        let goldLost: Int
+    }
+    var raidOutcome: RaidOutcome?
+
+    /// True while RaidView should be on screen: the raid itself, then its result.
+    var isRaidScreenUp: Bool { isRaidActive || raidOutcome != nil }
+
+    func dismissRaidOutcome() { raidOutcome = nil }
 
     /// Blessing special effects, summed across stacks. Used by dungeon combat and
     /// handed to RaidScene, so "carry your blessings into the raid" covers more
@@ -618,6 +691,12 @@ class DungeonGame {
             heroHp = max(1, min(heroMaxHp, heroHpAfterRaid))
             let earned = raidShardReward
             soulShards += earned
+            // A full clear also drops boss-tier loot (Uncommon or better), with
+            // greed improving the odds like any other drop.
+            let loot = EquipmentDrop.rollBoss(floor: currentFloor, luck: greedMultiplier)
+            if let loot { receiveDrop(loot) }
+            raidOutcome = RaidOutcome(kind: .cleared, shards: earned, loot: loot,
+                                      blessingsLost: 0, goldLost: 0)
             log("🏆 RAID COMPLETE — +\(earned) Soul Shard\(earned == 1 ? "" : "s")!")
         } else {
             let blessingCount = activeEffects.filter { $0.isBlessing }.count
@@ -626,8 +705,23 @@ class DungeonGame {
             atRiskGold = 0
             // Hero exits gravely wounded — alive but weakened by the defeat.
             heroHp = max(1, heroMaxHp / 3)
+            raidOutcome = RaidOutcome(kind: .lost, shards: 0, loot: nil,
+                                      blessingsLost: blessingCount, goldLost: goldLost)
             log("💀 RAID FAILED — \(blessingCount) blessing\(blessingCount == 1 ? "" : "s") lost, \(goldLost)g forfeit.")
         }
+    }
+
+    /// Cash out between waves: take a share of the shards and walk away with your
+    /// blessings and pot intact. The raid's own push-your-luck decision.
+    func escapeRaid(wavesCleared: Int, heroHpAfterRaid: Int) {
+        guard isRaidActive else { return }
+        isRaidActive = false
+        heroHp = max(1, min(heroMaxHp, heroHpAfterRaid))
+        let earned = raidEscapeReward(wavesCleared: wavesCleared)
+        soulShards += earned
+        raidOutcome = RaidOutcome(kind: .escaped(afterWave: wavesCleared), shards: earned, loot: nil,
+                                  blessingsLost: 0, goldLost: 0)
+        log("🏃 Escaped the raid after wave \(wavesCleared) — +\(earned) Soul Shard\(earned == 1 ? "" : "s").")
     }
 
     /// Reverse and remove all blessing-type active effects. Curses stay since
@@ -1895,6 +1989,7 @@ class DungeonGame {
                 blessingsLost: activeEffects.filter { $0.isBlessing }.count,
                 goldLost: atRiskGold)
             completeRaid(success: false, heroHpAfterRaid: 0)
+            raidOutcome = nil   // the alert explains it; no result screen to show
             log("🏳️ Raid abandoned — counted as a loss.")
         }
 

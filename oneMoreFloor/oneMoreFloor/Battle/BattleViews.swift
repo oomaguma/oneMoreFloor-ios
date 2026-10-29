@@ -42,7 +42,7 @@ struct BattleTabView: View {
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
                 // 1. The dungeon itself, edge to edge (shakes on big hits).
-                ArenaSceneView(combatScene: combatScene, opacity: spriteOpacity, shakeTrigger: shakeTrigger)
+                ArenaSceneView(scene: combatScene, opacity: spriteOpacity, shakeTrigger: shakeTrigger)
 
                 // 2. Greed heat — the screen literally heats up as greed climbs.
                 GreedHeatOverlay(fraction: greedFraction(game))
@@ -114,13 +114,14 @@ func greedFraction(_ game: DungeonGame) -> Double {
 /// The SpriteKit fight, stretched edge to edge and under the status bar. The
 /// bottom fades into the page so there's no hard "box" edge, and a dark wash
 /// at the top keeps the floating HUD readable.
+/// Shared by the battle screen (CombatScene) and raids (RaidScene).
 struct ArenaSceneView: View {
-    let combatScene: CombatScene
+    let scene: SKScene
     let opacity: Double
     let shakeTrigger: Int
 
     var body: some View {
-        SpriteView(scene: combatScene, options: [.allowsTransparency])
+        SpriteView(scene: scene, options: [.allowsTransparency])
             .opacity(opacity)
             // Screen shake: a quick, decaying side-to-side jolt per trigger bump.
             .keyframeAnimator(initialValue: CGFloat(0), trigger: shakeTrigger) { content, x in
@@ -662,7 +663,7 @@ struct ActiveEffectsBarView: View {
                                     .foregroundStyle(Color.white.opacity(0.40))
                             }
                         }
-                        Text("\(game.activeEffects.count) EFFECTS")
+                        Text("\(game.activeEffects.count) EFFECT\(game.activeEffects.count == 1 ? "" : "S")")
                             .font(Theme.Fonts.label(10))
                             .foregroundStyle(Color.white.opacity(0.40))
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
@@ -869,100 +870,111 @@ struct FloorEventCardView: View {
 
     var body: some View {
         let t = event.template
+        let accent = categoryColor(t.category)
         let canAfford = t.primaryGoldCost == 0 || game.gold >= t.primaryGoldCost
 
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
+        VStack(spacing: 14) {
+            // Header: glowing icon, category tag, and the event's name.
+            VStack(spacing: 6) {
                 Text(t.icon)
-                    .font(.system(size: 32))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(categoryLabel(t.category))
-                        .font(Theme.Fonts.label(11))
-                        .foregroundStyle(categoryColor(t.category))
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(categoryColor(t.category).opacity(0.15))
-                        )
-                    Text(t.title)
-                        .font(Theme.Fonts.label(16))
-                        .foregroundStyle(.white)
-                }
-                Spacer()
+                    .font(.system(size: 46))
+                    .shadow(color: accent.opacity(0.7), radius: 16)
+                Text(categoryLabel(t.category))
+                    .font(Theme.Fonts.label(11))
+                    .tracking(2)
+                    .foregroundStyle(accent)
+                Text(t.title)
+                    .font(Theme.Fonts.display(26))
+                    .foregroundStyle(Theme.Palette.parchment)
+                    .multilineTextAlignment(.center)
+                    .gameShadow(3)
             }
 
             Text(t.flavorText)
-                .font(Theme.Fonts.body(12).italic())
-                .foregroundStyle(Color.white.opacity(0.50))
+                .font(Theme.Fonts.body(14).italic())
+                .foregroundStyle(Theme.Palette.parchment.opacity(0.7))
+                .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Divider()
-                .background(Color.white.opacity(0.10))
-
-            HStack(spacing: 10) {
-                eventButton(
-                    label: t.primaryLabel,
-                    summary: t.primaryEffectSummary,
-                    active: canAfford,
-                    accent: canAfford ? categoryColor(t.category) : Color.white.opacity(0.3)
-                ) { game.resolveFloorEvent(primary: true) }
-
-                eventButton(
-                    label: t.secondaryLabel,
-                    summary: t.secondaryEffectSummary,
-                    active: true,
-                    accent: Color(red: 0.40, green: 0.65, blue: 0.95)
-                ) { game.resolveFloorEvent(primary: false) }
+            // Shrines cost gold: show the price against what you have.
+            if t.primaryGoldCost > 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: "circle.fill").font(.system(size: 9, weight: .bold))
+                    Text("Costs \(t.primaryGoldCost) · you have \(game.gold)")
+                        .font(Theme.Fonts.label(13))
+                }
+                .foregroundStyle(canAfford ? Theme.Palette.gold : Theme.Palette.blood)
+                .padding(.horizontal, 12)
+                .frame(height: 30)
+                .background(Capsule().fill(Color.black.opacity(0.3)))
             }
+
+            // The choice. Primary takes the event's color; the way out is stone.
+            HStack(spacing: 10) {
+                Button {
+                    Haptics.impact(.medium)
+                    game.resolveFloorEvent(primary: true)
+                } label: {
+                    choiceLabel(title: t.primaryLabel,
+                                subtitle: canAfford ? t.primaryEffectSummary : "Need \(t.primaryGoldCost) gold",
+                                active: canAfford)
+                }
+                .buttonStyle(ChunkyButtonStyle(face: canAfford ? accent.mix(with: .black, by: 0.3) : Theme.Palette.stoneHi,
+                                               lip: canAfford ? accent.mix(with: .black, by: 0.7) : .black,
+                                               cornerRadius: 14, depth: 5))
+                .disabled(!canAfford)
+
+                Button {
+                    Haptics.impact(.light)
+                    game.resolveFloorEvent(primary: false)
+                } label: {
+                    choiceLabel(title: t.secondaryLabel, subtitle: t.secondaryEffectSummary, active: true)
+                }
+                .buttonStyle(ChunkyButtonStyle(face: Theme.Palette.stoneHi, lip: .black, cornerRadius: 14, depth: 5))
+            }
+            .frame(height: 76)
         }
-        .padding(16)
-        .gamePanel(tint: categoryColor(t.category).opacity(0.75), cornerRadius: 14)
+        .padding(18)
+        .gamePanel(tint: accent.opacity(0.75), cornerRadius: 20)
         .padding(.horizontal, 16)
         .padding(.top, 8)
     }
 
-    private func eventButton(label: String, summary: String, active: Bool, accent: Color, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(spacing: 4) {
-                Text(label)
-                    .font(Theme.Fonts.label(12))
-                    .foregroundStyle(active ? accent : Color.white.opacity(0.25))
-                Text(summary)
-                    .font(Theme.Fonts.body(10))
-                    .foregroundStyle(Color.white.opacity(0.45))
-                    .multilineTextAlignment(.center)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(active ? accent.opacity(0.12) : Color.white.opacity(0.04))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(active ? accent.opacity(0.4) : Color.white.opacity(0.10),
-                                          lineWidth: 1)
-                    )
-            )
+    private func choiceLabel(title: String, subtitle: String, active: Bool) -> some View {
+        VStack(spacing: 3) {
+            // Uppercase for punch, but keep gold amounts reading "40g", not "40G".
+            Text(title.uppercased().replacingOccurrences(of: #"(\d)G\b"#, with: "$1g",
+                                                         options: .regularExpression))
+                .font(Theme.Fonts.display(17))
+                .foregroundStyle(active ? .white : Theme.Palette.ash)
+                .gameShadow()
+            Text(subtitle)
+                .font(Theme.Fonts.label(10))
+                .foregroundStyle(.white.opacity(active ? 0.8 : 0.4))
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .padding(.horizontal, 6)
         }
-        .disabled(!active)
-        .buttonStyle(.plain)
     }
 
+    /// The tag over the title. Curse-category events are optional 50/50 gambles
+    /// you can walk away from, so they're labelled GAMBLE — "CURSE" read as if
+    /// something bad had already happened.
     private func categoryLabel(_ cat: FloorEventTemplate.Category) -> String {
         switch cat {
         case .blessing: return "BLESSING"
         case .shrine:   return "SHRINE"
-        case .curse:    return "CURSE"
+        case .curse:    return "GAMBLE"
         case .mystery:  return "MYSTERY"
         }
     }
 
     private func categoryColor(_ cat: FloorEventTemplate.Category) -> Color {
         switch cat {
-        case .blessing: return Color(red: 0.30, green: 0.85, blue: 0.45)
-        case .shrine:   return Color(red: 0.95, green: 0.78, blue: 0.25)
-        case .curse:    return Color(red: 0.95, green: 0.35, blue: 0.35)
+        case .blessing: return Theme.Palette.life
+        case .shrine:   return Theme.Palette.gold
+        case .curse:    return Theme.Palette.blood
         case .mystery:  return Color(red: 0.65, green: 0.35, blue: 0.95)
         }
     }

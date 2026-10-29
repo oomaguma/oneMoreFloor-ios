@@ -18,6 +18,8 @@
 //                         (so on floor <floor>+1) with 100 gold at risk, with
 //                         the Rest / Descend / Raid card up. Use a boss floor: 10, 20, …
 //   -debugBlessings YES   Also grant War Surge, Thorn Mantle, and Blood Rush.
+//   -debugEvent <name>    Show a floor event card now (a FloorEventTemplate case,
+//                         e.g. lifeVessel, cursedSigil, bloodRush, strangeAltar).
 
 #if DEBUG
 import Foundation
@@ -28,6 +30,14 @@ extension DungeonGame {
 
     func applyDebugLaunchArguments() {
         let args = UserDefaults.standard
+
+        // -debugEvent <template>: summon a floor event card, e.g. lifeVessel,
+        // cursedSigil, bloodRush, strangeAltar (any FloorEventTemplate case).
+        if let raw = args.string(forKey: "debugEvent"),
+           let template = FloorEventTemplate(rawValue: raw) {
+            pendingFloorEvent = FloorEvent(template: template)
+            log("🛠 DEBUG: summoned floor event \(raw)")
+        }
 
         let raidFloor = args.integer(forKey: "debugRaid")
         guard raidFloor > 0 else { return }

@@ -54,9 +54,12 @@ struct RaidTests {
     }
 
     @Test func winNeverLeavesTheHeroDeadOrOverhealed() {
+        // A full clear also auto-equips its boss loot, and HP gear raises both
+        // current and max HP — so check the bounds, not exact numbers.
         let game = gameInRaid(floor: 10)
         game.completeRaid(success: true, heroHpAfterRaid: 0)
-        #expect(game.heroHp == 1)
+        #expect(game.heroHp >= 1)
+        #expect(game.heroHp <= game.heroMaxHp)
 
         let game2 = gameInRaid(floor: 10)
         game2.completeRaid(success: true, heroHpAfterRaid: game2.heroMaxHp + 50)
@@ -110,4 +113,71 @@ struct RaidTests {
         // 15% of a 120-HP hero → 18 between waves.
         #expect(RaidScene.raidScaled(120, by: RaidScene.breatherHealFraction) == 18)
     }
+
+    // MARK: - Greed, escape, outcome (raid glow-up)
+
+    @Test func greedMultipliesTheReward() {
+        let game = gameInRaid(floor: 30)        // base 10
+        game.greedMultiplier = 2.0
+        #expect(game.raidShardReward == 20)
+    }
+
+    @Test func escapePaysAShareOfTheFullReward() {
+        let game = gameInRaid(floor: 30)        // full reward 10
+        #expect(game.raidEscapeReward(wavesCleared: 1) == 3)   // 25%, rounded
+        #expect(game.raidEscapeReward(wavesCleared: 2) == 5)   // 50%
+        #expect(game.raidEscapeReward(wavesCleared: 3) == 0)   // no escaping after the boss
+    }
+
+    @Test func escapingKeepsBlessingsAndThePot() {
+        let game = gameInRaid(floor: 30)
+        game.atRiskGold = 120
+        game.activeEffects = [ActiveEffect(name: "War Surge", icon: "💥",
+                                           isBlessing: true, splashDamagePercent: 0.40)]
+        let before = game.soulShards
+        game.escapeRaid(wavesCleared: 2, heroHpAfterRaid: 50)
+
+        #expect(game.isRaidActive == false)
+        #expect(game.soulShards - before == 5)
+        #expect(game.atRiskGold == 120)
+        #expect(game.activeEffects.count == 1)
+        #expect(game.heroHp == 50)
+        #expect(game.raidOutcome?.kind == .escaped(afterWave: 2))
+    }
+
+    @Test func fullClearRecordsShardsAndLoot() {
+        let game = gameInRaid(floor: 30)
+        game.completeRaid(success: true, heroHpAfterRaid: game.heroHp)
+        #expect(game.raidOutcome?.kind == .cleared)
+        #expect(game.raidOutcome?.shards == 10)
+        #expect(game.raidOutcome?.loot != nil)          // boss-tier drop is guaranteed
+        // The result screen stays up until Continue, then goes away.
+        #expect(game.isRaidScreenUp)
+        game.dismissRaidOutcome()
+        #expect(game.isRaidScreenUp == false)
+    }
+
+    @Test func lossOutcomeListsWhatWasLost() {
+        let game = gameInRaid(floor: 10)
+        game.atRiskGold = 70
+        game.completeRaid(success: false, heroHpAfterRaid: 0)
+        #expect(game.raidOutcome == DungeonGame.RaidOutcome(kind: .lost, shards: 0, loot: nil,
+                                                            blessingsLost: 0, goldLost: 70))
+    }
+
+    // MARK: - Danger read
+
+    @Test func dangerRisesWithDepth() {
+        let shallow = gameInRaid(floor: 11)
+        let deep    = gameInRaid(floor: 18)     // same zone, same hero, tougher enemies
+        #expect(deep.raidDangerRatio > shallow.raidDangerRatio)
+    }
+
+    @Test func dangerFallsWithAStrongerHero() {
+        let weak   = gameInRaid(floor: 11)
+        let strong = gameInRaid(floor: 11)
+        strong.heroAtk = 40
+        #expect(strong.raidDangerRatio < weak.raidDangerRatio)
+    }
 }
+

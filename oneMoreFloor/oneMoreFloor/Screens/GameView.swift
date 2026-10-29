@@ -150,7 +150,7 @@ struct GameView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
                 .animation(.spring(response: 0.5, dampingFraction: 0.8), value: event.id)
-            } else if game.isRaidActive {
+            } else if game.isRaidScreenUp {
                 // Full-screen raid takeover — shown above everything else while the
                 // side-scrolling arena combat plays out. Returns to dungeon when done.
                 RaidView(game: game)
@@ -313,7 +313,7 @@ struct GameView: View {
                 // menu/sheet is open so the player has time to manage. In manual
                 // mode the tick only handles regen/spawn; taps drive the fight.
                 let menuOpen = selectedTab != .battle || showStore || showSettings || showIntro
-                if !isFading && !game.pendingRestSite && !game.isRaidActive && !menuOpen {
+                if !isFading && !game.pendingRestSite && !game.isRaidScreenUp && !menuOpen {
                     game.tick()
                 }
             }
@@ -338,7 +338,7 @@ struct GameView: View {
         offlineSummary != nil ||
         game.pendingRestSite ||
         game.pendingFloorEvent != nil ||
-        game.isRaidActive
+        game.isRaidScreenUp
     }
 
     private var showSheet: Binding<Bool> {

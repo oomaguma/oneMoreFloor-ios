@@ -3,27 +3,33 @@ import SpriteKit
 
 // MARK: - Raid View
 
-/// Full-screen view that wraps RaidScene for the duration of a raid. Shows the
-/// arena SpriteView, a hero HP bar, a wave counter, and a result overlay once
-/// the raid resolves. RaidScene drives all the combat logic and fires callbacks;
-/// this view just displays state and hands the outcome back to DungeonGame.
+/// Full-screen raid: the RaidScene arena running full-bleed (like the battle
+/// screen), a floating HUD with wave pips and what's at stake, the cash-out
+/// decision between waves, and the result screen.
+///
+/// RaidScene runs the combat and fires callbacks; this view displays state and
+/// hands decisions to DungeonGame. The raid is *resolved* the moment it ends
+/// (DungeonGame.raidOutcome) — Continue on the result screen only dismisses it.
 struct RaidView: View {
 
     let game: DungeonGame
 
     // MARK: - State
 
-    @State private var heroHp:     Int
-    @State private var heroMaxHp:  Int
+    @State private var heroHp:      Int
+    @State private var heroMaxHp:   Int
     @State private var currentWave: Int = 0
-    /// nil = in progress; true = victory; false = defeat.
-    @State private var raidResult: Bool? = nil
-    @State private var raidScene:  RaidScene
+    @State private var raidScene:   RaidScene
 
-    // MARK: - Design tokens
+    /// Set when a wave is cleared and the player must choose Escape / Press On.
+    @State private var clearedWave: Int?
+    /// The big center banner ("WAVE 2" / "BOSS WAVE"); nil hides it.
+    @State private var banner: String?
+    // Juice triggers, bumped by scene callbacks.
+    @State private var shakeTrigger = 0
+    @State private var hurtTrigger  = 0
 
-    private let bgColor   = Color(red: 0.05, green: 0.05, blue: 0.08)
-    private let accentRaid = Color(red: 0.75, green: 0.30, blue: 1.00)
+    private let accentRaid = Color(red: 0.75, green: 0.35, blue: 1.00)
 
     // MARK: - Init
 
@@ -52,218 +58,381 @@ struct RaidView: View {
 
     var body: some View {
         ZStack {
-            bgColor.ignoresSafeArea()
+            Theme.Palette.abyss.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                raidHeaderBar
+                ZStack(alignment: .top) {
+                    // 1. The arena, edge to edge.
+                    ArenaSceneView(scene: raidScene, opacity: 1, shakeTrigger: shakeTrigger)
+
+                    // 2. Red edge flash when the hero is hit.
+                    HurtFlashOverlay(trigger: hurtTrigger)
+
+                    // 3. Tap catcher — same frame as the SpriteView, so tap
+                    //    locations map straight into the scene for targeting.
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .ignoresSafeArea(edges: .top)
+                        .gesture(
+                            SpatialTapGesture().onEnded { tap in
+                                guard isFighting else { return }
+                                raidScene.playerTap(atViewPoint: tap.location)
+                            }
+                        )
+
+                    // 4. Floating HUD.
+                    VStack(spacing: 10) {
+                        raidHeader
+                        stakesRow
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 14)
+                    .allowsHitTesting(false)
+
+                    // 5. Wave banner.
+                    if let banner {
+                        waveBanner(banner)
+                            .frame(maxHeight: .infinity)
+                            .allowsHitTesting(false)
+                            .transition(.scale(scale: 1.6).combined(with: .opacity))
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                heroPanel
+                    .padding(.horizontal, 14)
                     .padding(.top, 8)
-
-                // Arena — taps trigger immediate hero strikes.
-                SpriteView(scene: raidScene, options: [.allowsTransparency])
-                    .aspectRatio(300.0 / 160.0, contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .allowsHitTesting(raidResult == nil)
-                    .onTapGesture { raidScene.playerTap() }
-                    .padding(.top, 8)
-
-                heroHpSection
-                    .padding(.horizontal, 24)
-                    .padding(.top, 14)
-
-                raidStakesReminder
-                    .padding(.horizontal, 24)
-                    .padding(.top, 10)
-
-                Spacer()
+                    .padding(.bottom, 14)
             }
 
-            // Result overlay — fades in after the scene resolves.
-            if let result = raidResult {
-                raidResultOverlay(success: result)
+            // Between waves: Escape or Press On.
+            if let wave = clearedWave, game.raidOutcome == nil {
+                decisionOverlay(clearedWave: wave)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
+            }
+
+            // The raid is over — show how it went.
+            if let outcome = game.raidOutcome {
+                resultOverlay(outcome)
                     .transition(.opacity)
             }
         }
+        .animation(.spring(response: 0.35), value: clearedWave)
+        .animation(.easeInOut(duration: 0.3), value: game.raidOutcome)
         .onAppear { wireUpScene() }
     }
 
+    private var isFighting: Bool { game.isRaidActive && clearedWave == nil }
+
     // MARK: - Wire-up
 
-    /// Connects RaidScene callbacks to local @State so SwiftUI reflects combat.
+    /// Connects RaidScene callbacks to local state and to DungeonGame.
     private func wireUpScene() {
-        raidScene.onHeroHpChanged = { hp, _ in
-            heroHp = hp
+        raidScene.onHeroHpChanged = { hp, _ in heroHp = hp }
+        raidScene.onWaveChanged   = { wave, _ in currentWave = wave }
+        raidScene.onWaveStarted   = { wave, total, isBoss in
+            showBanner(isBoss ? "BOSS WAVE" : "WAVE \(wave) / \(total)")
+            if isBoss { shakeTrigger += 1; Haptics.notify(.warning) }
         }
-        raidScene.onWaveChanged = { wave, _ in
-            withAnimation(.easeInOut(duration: 0.2)) {
-                currentWave = wave
-            }
+        raidScene.onWaveCleared = { wave, _ in
+            Haptics.notify(.success)
+            clearedWave = wave
         }
+        raidScene.onHeroHurt = { hurtTrigger += 1 }
+        raidScene.onHeroCrit = { shakeTrigger += 1; Haptics.impact(.heavy) }
         raidScene.onRaidCompleted = { success in
-            // Keep hero HP in sync for the failure case (scene set it to 0).
-            // completeRaid() will then restore it to a wounded-but-alive value.
-            withAnimation(.easeInOut(duration: 0.35)) {
-                raidResult = success
-            }
+            // Resolve immediately: rewards/penalties land now, not on Continue.
+            game.completeRaid(success: success, heroHpAfterRaid: raidScene.heroHp)
+            Haptics.notify(success ? .success : .error)
         }
     }
 
-    // MARK: - Sub-views
+    private func showBanner(_ text: String) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) { banner = text }
+        Task {
+            try? await Task.sleep(for: .seconds(1.3))
+            withAnimation(.easeIn(duration: 0.25)) { banner = nil }
+        }
+    }
 
-    private var raidHeaderBar: some View {
-        HStack {
-            Label("RAID", systemImage: "shield.lefthalf.filled")
-                .font(Theme.Fonts.label(12))
-                .foregroundStyle(accentRaid)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(accentRaid.opacity(0.15))
-                .clipShape(Capsule())
+    // MARK: - HUD
 
-            Spacer()
-
-            if currentWave > 0 {
-                Text("WAVE  \(currentWave) / 3")
+    /// "RAID" + zone on the left, wave pips on the right.
+    private var raidHeader: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 2) {
+                Label("RAID", systemImage: "flag.2.crossed.fill")
+                    .font(Theme.Fonts.display(20))
+                    .foregroundStyle(accentRaid)
+                    .gameShadow(2)
+                Text("\(game.currentZone.icon) \(game.currentZone.shortName) · floor \(game.currentFloor)")
                     .font(Theme.Fonts.label(12))
-                    .foregroundStyle(Color.white.opacity(0.65))
-            }
-        }
-        .padding(.horizontal, 20)
-    }
-
-    private var heroHpSection: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text("HP")
-                    .font(Theme.Fonts.label(10))
-                    .foregroundStyle(Color.white.opacity(0.50))
-                Spacer()
-                Text("\(heroHp) / \(heroMaxHp)")
-                    .font(Theme.Fonts.label(11))
-                    .foregroundStyle(Color.white.opacity(0.75))
-                    .monospacedDigit()
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.white.opacity(0.10))
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(hpBarColor)
-                        .frame(width: geo.size.width *
-                               max(0, CGFloat(heroHp) / CGFloat(max(1, heroMaxHp))))
-                        .animation(.linear(duration: 0.15), value: heroHp)
-                }
-            }
-            .frame(height: 9)
-        }
-    }
-
-    /// Color of the HP bar — transitions from green → yellow → red as HP drops.
-    private var hpBarColor: Color {
-        let pct = Double(heroHp) / Double(max(1, heroMaxHp))
-        if pct > 0.5 { return Color(red: 0.25, green: 0.85, blue: 0.40) }
-        if pct > 0.25 { return Color(red: 0.95, green: 0.75, blue: 0.15) }
-        return Color(red: 0.95, green: 0.25, blue: 0.25)
-    }
-
-    /// Small reminder of what rides on this raid, so the stakes stay visible.
-    private var raidStakesReminder: some View {
-        let blessingCount = game.activeEffects.filter { $0.isBlessing }.count
-        let atRisk        = game.atRiskGold
-
-        return HStack(spacing: 12) {
-            if blessingCount > 0 {
-                Label("\(blessingCount) blessing\(blessingCount == 1 ? "" : "s") at risk",
-                      systemImage: "sparkles")
-                    .font(Theme.Fonts.body(10))
-                    .foregroundStyle(Color(red: 0.95, green: 0.75, blue: 0.30).opacity(0.75))
-            }
-            if atRisk > 0 {
-                Label("\(atRisk)g at risk", systemImage: "dollarsign.circle")
-                    .font(Theme.Fonts.body(10))
-                    .foregroundStyle(Color(red: 1.0, green: 0.55, blue: 0.25).opacity(0.75))
+                    .foregroundStyle(Theme.Palette.dust)
+                    .gameShadow(1)
             }
             Spacer()
+            // Wave pips: done = green, current = violet, upcoming = dim. The last is the boss.
+            HStack(spacing: 6) {
+                ForEach(1...3, id: \.self) { wave in
+                    let done    = wave < currentWave || (wave == currentWave && clearedWave == wave)
+                    let current = wave == currentWave && !done
+                    Image(systemName: wave == 3 ? "crown.fill" : "circle.fill")
+                        .font(.system(size: wave == 3 ? 14 : 11, weight: .bold))
+                        .foregroundStyle(done ? Theme.Palette.life : current ? accentRaid : Theme.Palette.ash)
+                        .gameShadow(1)
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 32)
+            .gamePanel(tint: accentRaid.opacity(0.6), cornerRadius: 16, translucent: true)
         }
     }
 
-    /// The failure screen's summary. Read before completeRaid() strips anything.
-    private var lossSummary: String {
-        let blessings = game.activeEffects.filter { $0.isBlessing }.count
-        var lines: [String] = []
-        if blessings > 0      { lines.append("\(blessings) blessing\(blessings == 1 ? "" : "s") lost.") }
-        if game.atRiskGold > 0 { lines.append("\(game.atRiskGold) at-risk gold forfeit.") }
-        return lines.isEmpty ? "You escape wounded." : lines.joined(separator: "\n")
+    /// What rides on this raid, always visible: blessings + pot vs. the prize.
+    private var stakesRow: some View {
+        HStack(spacing: 8) {
+            let blessings = game.activeEffects.filter { $0.isBlessing }
+            if !blessings.isEmpty {
+                chip {
+                    HStack(spacing: 2) { ForEach(blessings) { Text($0.icon).font(.system(size: 12)) } }
+                }
+            }
+            if game.atRiskGold > 0 {
+                chip {
+                    Label("\(game.atRiskGold)", systemImage: "bag.fill")
+                        .font(Theme.Fonts.number(13))
+                        .foregroundStyle(Theme.Palette.gold)
+                }
+            }
+            Spacer()
+            chip {
+                Text("WIN +\(game.raidShardReward) ◈")
+                    .font(Theme.Fonts.label(12))
+                    .foregroundStyle(Theme.Palette.shard)
+            }
+        }
     }
 
-    // MARK: - Result overlay
+    private func chip<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .gamePanel(cornerRadius: 14, translucent: true)
+    }
 
-    @ViewBuilder
-    private func raidResultOverlay(success: Bool) -> some View {
-        ZStack {
-            Color.black.opacity(0.78).ignoresSafeArea()
+    private func waveBanner(_ text: String) -> some View {
+        Text(text)
+            .font(Theme.Fonts.display(text == "BOSS WAVE" ? 40 : 34))
+            .foregroundStyle(text == "BOSS WAVE" ? Theme.Palette.blood : Theme.Palette.parchment)
+            .gameShadow(4)
+    }
 
-            VStack(spacing: 18) {
-                Text(success ? "🏆" : "💀")
-                    .font(.system(size: 60))
+    /// Hero name, HP bar, and a one-line control hint, under the arena.
+    private var heroPanel: some View {
+        let pct = Double(max(0, heroHp)) / Double(max(1, heroMaxHp))
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(game.character.name.uppercased())
+                    .font(Theme.Fonts.display(15))
+                    .foregroundStyle(Theme.Palette.parchment)
+                    .gameShadow()
+                Spacer()
+                Text("\(max(0, heroHp)) / \(heroMaxHp)")
+                    .font(Theme.Fonts.number(13))
+                    .foregroundStyle(Theme.Palette.parchment.opacity(0.8))
+            }
+            GameBar(fraction: pct,
+                    color: pct > 0.5 ? Theme.Palette.life : pct > 0.25 ? Theme.Palette.warning : Theme.Palette.blood,
+                    height: 14)
+            Label("Tap an enemy to focus it · tap anywhere to strike", systemImage: "hand.tap.fill")
+                .font(Theme.Fonts.label(11))
+                .foregroundStyle(Theme.Palette.dust)
+        }
+        .padding(14)
+        .gamePanel(cornerRadius: 16)
+    }
 
-                Text(success ? "RAID COMPLETE" : "RAID FAILED")
-                    .font(Theme.Fonts.display(22))
-                    .foregroundStyle(
-                        success
-                        ? Color(red: 0.95, green: 0.82, blue: 0.10)
-                        : Color(red: 0.90, green: 0.25, blue: 0.25)
-                    )
+    // MARK: - Between-wave decision
 
-                // Summarise what was gained or lost.
-                Group {
-                    if success {
-                        // Same number completeRaid() pays — one source of truth.
-                        let earned = game.raidShardReward
-                        Text("+\(earned) Soul Shard\(earned == 1 ? "" : "s") earned!")
-                            .foregroundStyle(Color.white.opacity(0.85))
-                    } else {
-                        // Only name what was actually lost (this used to claim
-                        // "All blessings lost" even when the hero had none).
-                        Text(lossSummary)
-                            .foregroundStyle(Color.white.opacity(0.65))
-                            .multilineTextAlignment(.center)
-                    }
+    /// The raid's push-your-luck beat: bank a share of the shards now, or risk
+    /// your blessings and pot for the full prize.
+    private func decisionOverlay(clearedWave wave: Int) -> some View {
+        let escape     = game.raidEscapeReward(wavesCleared: wave)
+        let nextCount  = RaidScene.enemyCount(wave: wave + 1)
+        let bossNext   = wave + 1 == 3
+        let heal       = RaidScene.raidScaled(heroMaxHp, by: RaidScene.breatherHealFraction)
+        let blessings  = game.activeEffects.filter { $0.isBlessing }.count
+
+        return ZStack {
+            Color.black.opacity(0.55).ignoresSafeArea()
+            VStack(spacing: 14) {
+                VStack(spacing: 4) {
+                    Text("WAVE \(wave) CLEARED")
+                        .font(Theme.Fonts.display(26))
+                        .foregroundStyle(Theme.Palette.life)
+                        .gameShadow(3)
+                    Text("+\(heal) HP · catch your breath")
+                        .font(Theme.Fonts.label(13))
+                        .foregroundStyle(Theme.Palette.dust)
                 }
-                .font(Theme.Fonts.body(14))
 
-                // Continue — dismisses the raid and returns to the dungeon.
+                // What's next.
+                Label("Next: \(nextCount) enemies\(bossNext ? ", including the boss" : "")",
+                      systemImage: bossNext ? "crown.fill" : "person.3.fill")
+                    .font(Theme.Fonts.label(14))
+                    .foregroundStyle(bossNext ? Theme.Palette.blood : Theme.Palette.parchment)
+
+                // What pressing on risks.
+                if blessings > 0 || game.atRiskGold > 0 {
+                    Text("Fall and you lose " + lossParts(blessings: blessings, gold: game.atRiskGold) + ".")
+                        .font(Theme.Fonts.body(13))
+                        .foregroundStyle(Theme.Palette.flame)
+                        .multilineTextAlignment(.center)
+                }
+
+                HStack(spacing: 10) {
+                    Button {
+                        raidScene.endForEscape()
+                        game.escapeRaid(wavesCleared: wave, heroHpAfterRaid: raidScene.heroHp)
+                        Haptics.impact(.medium)
+                    } label: {
+                        choiceLabel(title: "ESCAPE", icon: "figure.walk.departure",
+                                    subtitle: "+\(escape) ◈ · keep it all")
+                    }
+                    .buttonStyle(ChunkyButtonStyle(face: Theme.Palette.life.mix(with: .black, by: 0.3),
+                                                   lip: Theme.Palette.lifeDeep.mix(with: .black, by: 0.5)))
+
+                    Button {
+                        clearedWave = nil
+                        raidScene.continueToNextWave()
+                        Haptics.impact(.heavy)
+                    } label: {
+                        choiceLabel(title: "PRESS ON", icon: "flame.fill",
+                                    subtitle: "full clear: +\(game.raidShardReward) ◈ + loot")
+                    }
+                    .buttonStyle(ChunkyButtonStyle(face: accentRaid.mix(with: .black, by: 0.25),
+                                                   lip: accentRaid.mix(with: .black, by: 0.7)))
+                }
+                .frame(height: 76)
+            }
+            .padding(20)
+            .gamePanel(tint: Theme.Palette.life.opacity(0.7), cornerRadius: 20)
+            .padding(.horizontal, 18)
+        }
+    }
+
+    private func choiceLabel(title: String, icon: String, subtitle: String) -> some View {
+        VStack(spacing: 3) {
+            Label(title, systemImage: icon)
+                .font(Theme.Fonts.display(17))
+                .foregroundStyle(.white)
+                .gameShadow()
+            Text(subtitle)
+                .font(Theme.Fonts.label(10))
+                .foregroundStyle(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 4)
+        }
+    }
+
+    // MARK: - Result
+
+    private func resultOverlay(_ outcome: DungeonGame.RaidOutcome) -> some View {
+        ZStack {
+            Color.black.opacity(0.75).ignoresSafeArea()
+            VStack(spacing: 16) {
+                switch outcome.kind {
+                case .cleared:
+                    resultHeader(icon: "trophy.fill", title: "RAID CLEARED", color: Theme.Palette.gold)
+                    shardsEarned(outcome.shards)
+                    if let loot = outcome.loot { lootCard(loot) }
+                case .escaped(let wave):
+                    resultHeader(icon: "figure.walk.departure", title: "ESCAPED", color: Theme.Palette.frost)
+                    Text("after wave \(wave) · blessings and gold kept")
+                        .font(Theme.Fonts.label(13))
+                        .foregroundStyle(Theme.Palette.dust)
+                    shardsEarned(outcome.shards)
+                case .lost:
+                    resultHeader(icon: "xmark.shield.fill", title: "RAID FAILED", color: Theme.Palette.blood)
+                    Text(outcome.blessingsLost > 0 || outcome.goldLost > 0
+                         ? "You lost " + lossParts(blessings: outcome.blessingsLost, gold: outcome.goldLost) + "."
+                         : "You escape, badly wounded.")
+                        .font(Theme.Fonts.body(15))
+                        .foregroundStyle(Theme.Palette.parchment.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                }
+
                 Button {
-                    game.completeRaid(success: success, heroHpAfterRaid: raidScene.heroHp)
-                    // isRaidActive → false collapses RaidView from GameView's ZStack
+                    game.dismissRaidOutcome()
                 } label: {
                     Text("CONTINUE")
-                        .font(Theme.Fonts.label(14))
-                        .foregroundStyle(
-                            success ? Color(red: 0.95, green: 0.82, blue: 0.10) : .white
-                        )
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(success
-                                    ? Color(red: 0.55, green: 0.42, blue: 0.08).opacity(0.30)
-                                    : Theme.Palette.stoneHi)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .strokeBorder(
-                                            success
-                                            ? Color(red: 0.95, green: 0.78, blue: 0.25).opacity(0.60)
-                                            : Color.white.opacity(0.20),
-                                            lineWidth: 1
-                                        )
-                                )
-                        )
+                        .font(Theme.Fonts.display(18))
+                        .foregroundStyle(Theme.Palette.parchment)
+                        .gameShadow()
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 40)
-                .padding(.top, 8)
+                .buttonStyle(ChunkyButtonStyle(face: Theme.Palette.stoneHi, lip: .black, cornerRadius: 14, depth: 5))
+                .frame(height: 58)
+                .padding(.top, 4)
             }
-            .padding(36)
+            .padding(24)
+            .gamePanel(tint: resultTint(outcome.kind).opacity(0.75), cornerRadius: 22)
+            .padding(.horizontal, 28)
         }
+    }
+
+    private func resultHeader(icon: String, title: String, color: Color) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 44, weight: .bold))
+                .foregroundStyle(color)
+                .gameShadow(3)
+                .symbolEffect(.bounce, options: .nonRepeating)
+            Text(title)
+                .font(Theme.Fonts.display(32))
+                .foregroundStyle(color)
+                .gameShadow(4)
+        }
+    }
+
+    private func shardsEarned(_ shards: Int) -> some View {
+        Text("+\(shards) ◈")
+            .font(Theme.Fonts.number(40))
+            .foregroundStyle(Theme.Palette.shard)
+            .gameShadow(3)
+    }
+
+    /// The boss-tier drop from a full clear, framed in its rarity color.
+    private func lootCard(_ item: Equipment) -> some View {
+        HStack(spacing: 12) {
+            ItemIconView(item: item, size: 44)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.name)
+                    .font(Theme.Fonts.label(15))
+                    .foregroundStyle(Theme.Palette.parchment)
+                Text(item.rarity.label.uppercased())
+                    .font(Theme.Fonts.label(11))
+                    .foregroundStyle(item.rarity.uiColor)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .gamePanel(tint: item.rarity.uiColor.opacity(0.8), cornerRadius: 14)
+        .shadow(color: item.rarity.uiColor.opacity(0.45), radius: 14)
+    }
+
+    private func resultTint(_ kind: DungeonGame.RaidOutcome.Kind) -> Color {
+        switch kind {
+        case .cleared: return Theme.Palette.gold
+        case .escaped: return Theme.Palette.frost
+        case .lost:    return Theme.Palette.blood
+        }
+    }
+
+    /// "3 blessings and 100 gold", skipping whatever is zero.
+    private func lossParts(blessings: Int, gold: Int) -> String {
+        var parts: [String] = []
+        if blessings > 0 { parts.append("\(blessings) blessing\(blessings == 1 ? "" : "s")") }
+        if gold > 0      { parts.append("\(gold) gold") }
+        return parts.joined(separator: " and ")
     }
 }

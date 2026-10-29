@@ -136,7 +136,9 @@ The smallest change that fixes the dead first session. Ship it, watch D1/D7 move
 - [x] Overlays (offline summary, boss victory, zone unlock, item/blessing banners) → `.gamePanel`, chunky buttons, palette tokens.
 - [x] Items → gear row pinned to natural height (was ballooning to ~340pt), ghosted gear-art empty slots (the weapon slot's SF Symbol "sword" doesn't exist, so it showed nothing), chunky sell/optimize.
 - [x] Quests → display header, themed gold/green progress bars. Prestige → chunky PRESTIGE / RETIRE.
-- [ ] Hand-polish still pending: Settings, Store, Raid, floor-event card, map (token-migrated only).
+- [x] Floor-event cards → centered glowing icon, category tag, display title, shrine cost line ("Costs 40 · you have 52", red when short), chunky choice buttons. The curse category is labelled **GAMBLE** (they're optional 50/50s, not something that already happened).
+- [x] Quests → claimable first / claimed last, icon tile per quest type, gold progress bars, pulsing chunky CLAIM; Daily Champion moved to the top as a bonus card. Fixed: its progress bar always drew full — now claimed / total.
+- [ ] Hand-polish still pending: Settings, Store, map (token-migrated only).
 - [x] PRESTIGE now asks for confirmation (it resets the run; Retire already did).
 - [ ] **Design flag:** the daily quest list shows up to 12 quests, incl. "Reach floor 100" as a daily — 3 achievable dailies is the healthier norm.
 - [ ] Pixel display font (OFL) — swap `Theme.Fonts.display` to `.custom(...)`; needs the font file added to the bundle.
@@ -165,13 +167,14 @@ Raid playtest findings (2026-10-29, fresh Soldier, no upgrades, floor 10, full H
 - [x] **Quit-to-escape exploits — fixed.** (1) `isRaidActive` / `pendingRestSite` weren't saved, so force-quitting a losing raid kept the pot and blessings. (2) Backgrounding 10s+ mid-raid ran the offline "make camp" sim, which banked the pot. Now both are saved (SaveData v10); a fresh launch with a saved raid resolves it as a loss and shows a "Raid abandoned" alert listing what was lost; a merely-backgrounded raid keeps running and skips the offline sim; a pending rest-site choice reappears after relaunch. Tested in `oneMoreFloorTests/SaveStateTests.swift` and verified in the simulator.
 - [x] The failure screen now lists only what was actually lost (it used to claim "All blessings lost" with none).
 
-Glow-up ideas (recommended order):
-- [ ] **Raid briefing** before committing: exact shard reward, stakes (blessing icons + pot), wave layout with boss silhouette, and a danger meter (hero power vs scaled enemies).
-- [ ] **Cash out between waves**: after waves 1 and 2, *Escape* (partial shards, no further risk) or *Press on* (all or nothing) — the game's push-your-luck decision inside the raid.
-- [ ] **Visual pass** reusing the battle screen: full-bleed `resizeFill` arena, wave pips, `GameBar` HP over each enemy, wave-intro slam + shake, boss entrance card, themed result screen.
-- [ ] **Agency**: tap an enemy to target it; bring the class ability and heavy-attack dodges into raids.
-- [ ] **Reward worth bragging about**: shards scale with greed; guaranteed rare+ drop on a clean win with a rarity-beam reveal; raid trophies for the collection codex.
-- [ ] **Dignified loss**: itemized "what you lost", a low-HP Retreat option. No paid raid entries or energy systems.
+Raid glow-up (2026-10-29):
+- [x] **Raid briefing** (`RaidBriefingView` in DecisionCards.swift): the rest card's RAID… button opens it first — zone, wave layout (2 / 3 / 3+boss), prize (+N ◈ + boss-tier loot, escape payouts), what's at stake (blessing icons + pot), and a DANGER read (`DungeonGame.raidDanger`, a closed-form estimate on auto-attack) with a hint that matches the rating. BEGIN RAID or BACK.
+- [x] **Cash out between waves**: after waves 1 and 2 the scene pauses (`RaidScene.onWaveCleared` / `continueToNextWave()`); ESCAPE pays `raidEscapeShare` (25% / 50% of the full reward) and keeps blessings + pot (`DungeonGame.escapeRaid`), PRESS ON risks both for the full prize.
+- [x] **Visual pass**: `RaidScene` uses the same `resizeFill` + `world` layout as CombatScene (enemies walk in from off-screen); `RaidView` runs it full-bleed via the shared `ArenaSceneView`, with wave pips (crown = boss wave), a stakes row, a hero HP panel, "WAVE n" / "BOSS WAVE" banners, shake on crits and the boss wave, red hurt flash, outlined damage numbers, crit hit-stop, chunkier enemy HP bars.
+- [x] **Tap-to-target**: tapping on/near an enemy focuses it (gold ring underfoot); the hero hits the focused enemy first while it's in range.
+- [x] **Rewards**: `raidShardReward` now scales with greed; a full clear also rolls boss-tier loot (`EquipmentDrop.rollBoss`), shown on the result screen in its rarity color.
+- [x] **Result screen** reads `DungeonGame.raidOutcome` (cleared / escaped / lost, shards, loot, what was lost). The raid resolves the instant it ends — Continue only dismisses — so closing the app on the result screen can't count as abandoning it.
+- [ ] Still to do: class ability + heavy-attack dodges inside raids; a mid-wave Retreat at low HP; raid trophies for a collection codex. No paid raid entries or energy systems.
 
 **3d. Onboarding (FTUE)**
 - [ ] Replace the text-wall `IntroCardView` with teach-by-doing coach marks: first tap within 5s, guaranteed drop on floor 3, scripted first Rest decision by floor 5. *(Its current copy also says "stop tapping and your hero auto-battles," which is stale since the idle fallback was removed.)*
