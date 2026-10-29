@@ -582,6 +582,17 @@ class DungeonGame {
     /// hands control to RaidView. The hero carries in their live HP and all
     /// active blessings — clearing all waves earns soul shards, falling in
     /// battle strips blessings and forfeits the at-risk gold pot.
+    /// Soul shards a won raid pays out. The single source of truth for both the
+    /// payout and the result screen — they used to disagree (the screen showed
+    /// floor/5, the payout was floor/3), so the player was told the wrong number.
+    var raidShardReward: Int { max(5, currentFloor / 3) }
+
+    /// Blessing special effects, summed across stacks, handed to RaidScene so
+    /// "carry your blessings into the raid" covers more than flat stat mods.
+    var raidSplashFraction:   Double { activeEffects.reduce(0.0) { $0 + $1.splashDamagePercent } }
+    var raidThornsFraction:   Double { activeEffects.reduce(0.0) { $0 + $1.thornsDamagePercent } }
+    var raidKillHealFraction: Double { activeEffects.reduce(0.0) { $0 + $1.onKillHealPercent } }
+
     func launchRaid() {
         pendingRestSite = false
         isRaidActive = true
@@ -590,10 +601,13 @@ class DungeonGame {
 
     /// Resolve the raid. Called by RaidView after all waves are cleared (success)
     /// or the hero falls (failure). Returns control to the dungeon loop.
-    func completeRaid(success: Bool) {
+    /// `heroHpAfterRaid` is the HP the hero walked out with — on a win, damage
+    /// taken in the raid now sticks (before, a win quietly restored pre-raid HP).
+    func completeRaid(success: Bool, heroHpAfterRaid: Int) {
         isRaidActive = false
         if success {
-            let earned = max(5, currentFloor / 3)
+            heroHp = max(1, min(heroMaxHp, heroHpAfterRaid))
+            let earned = raidShardReward
             soulShards += earned
             log("🏆 RAID COMPLETE — +\(earned) Soul Shard\(earned == 1 ? "" : "s")!")
         } else {

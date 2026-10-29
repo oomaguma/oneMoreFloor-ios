@@ -119,6 +119,14 @@ class RaidScene: SKScene {
     private let zoneID: String
     private let floor:  Int
 
+    // Carried-in modifiers. Crit uses the game's full crit chance (class +
+    // legacy bonus), and blessing special effects work here like they do in
+    // the dungeon — before, raids only honored flat stat blessings.
+    private let critChance:       Double
+    private let splashFraction:   Double   // War Surge: share of each strike that hits a second enemy
+    private let thornsFraction:   Double   // Thorn Mantle: share of incoming damage reflected
+    private let killHealFraction: Double   // Blood Rush: share of max HP restored per kill
+
     // MARK: - Mutable raid state
 
     private var wave       = 0
@@ -163,7 +171,9 @@ class RaidScene: SKScene {
 
     init(hero: CharacterClass,
          heroHp: Int, heroMaxHp: Int, heroAtk: Int, heroDef: Int,
-         zoneID: String, floor: Int) {
+         zoneID: String, floor: Int,
+         critChance: Double, splashFraction: Double = 0,
+         thornsFraction: Double = 0, killHealFraction: Double = 0) {
         self.heroClass = hero
         self.heroHp    = heroHp
         self.heroMaxHp = heroMaxHp
@@ -171,6 +181,10 @@ class RaidScene: SKScene {
         self.heroDef   = heroDef
         self.zoneID    = zoneID
         self.floor     = floor
+        self.critChance       = critChance
+        self.splashFraction   = splashFraction
+        self.thornsFraction   = thornsFraction
+        self.killHealFraction = killHealFraction
         // Wider aspect ratio than the 1v1 CombatScene — we need horizontal room
         // for enemies walking in from the right side.
         super.init(size: CGSize(width: 300, height: 160))
@@ -406,7 +420,7 @@ class RaidScene: SKScene {
     }
 
     private func applyHeroDamageTo(_ enemy: RaidEnemy) {
-        let isCrit = Double.random(in: 0...1) < heroClass.critChance
+        let isCrit = Double.random(in: 0...1) < critChance
         let dmg    = max(1, isCrit ? heroAtk * 2 : heroAtk)
         enemy.hp  -= dmg
         SoundManager.shared.play(Bool.random() ? "sword_slice" : "sword_light")
@@ -423,10 +437,40 @@ class RaidScene: SKScene {
 
         if enemy.isDead {
             playEnemyDeath(enemy)
+            healOnKill()
         } else {
             enemy.syncHpBar()
             playEnemyHurt(enemy)
         }
+
+        // War Surge: splash part of the strike onto the next-closest enemy in range.
+        if splashFraction > 0,
+           let neighbor = raidEnemies
+               .filter({ $0 !== enemy && !$0.isDead && $0.node.position.x <= heroHitRange })
+               .min(by: { $0.node.position.x < $1.node.position.x }) {
+            let splash = max(1, Int(Double(dmg) * splashFraction))
+            neighbor.hp -= splash
+            floatText("-\(splash)",
+                      at: CGPoint(x: neighbor.node.position.x + 6, y: neighbor.node.position.y + 20),
+                      color: UIColor(red: 1.0, green: 0.75, blue: 0.40, alpha: 1), fontSize: 10)
+            if neighbor.isDead {
+                playEnemyDeath(neighbor)
+                healOnKill()
+            } else {
+                neighbor.syncHpBar()
+                playEnemyHurt(neighbor)
+            }
+        }
+    }
+
+    /// Blood Rush: each kill restores a share of max HP (same formula as the dungeon).
+    private func healOnKill() {
+        guard killHealFraction > 0, heroHp > 0 else { return }
+        let heal = max(1, Int(Double(heroMaxHp) * killHealFraction))
+        heroHp = min(heroMaxHp, heroHp + heal)
+        onHeroHpChanged?(heroHp, heroMaxHp)
+        floatText("+\(heal)", at: CGPoint(x: 44, y: 84),
+                  color: UIColor(red: 0.20, green: 0.90, blue: 0.38, alpha: 1))
     }
 
     // MARK: - Enemy combat
@@ -455,6 +499,14 @@ class RaidScene: SKScene {
         floatText("-\(dmg)", at: CGPoint(x: 44, y: 78),
                   color: UIColor(red: 1.0, green: 0.28, blue: 0.28, alpha: 1))
         playHeroHurt()
+
+        // Thorn Mantle: reflect part of the hit back. Like the dungeon version it
+        // can't land the killing blow — it stops at 1 HP.
+        if thornsFraction > 0, enemy.hp > 1 {
+            let reflected = min(enemy.hp - 1, max(1, Int(Double(dmg) * thornsFraction)))
+            enemy.hp -= reflected
+            enemy.syncHpBar()
+        }
 
         if heroHp <= 0 {
             endRaid(success: false)

@@ -142,6 +142,25 @@ The smallest change that fixes the dead first session. Ship it, watch D1/D7 move
 - [ ] Pixel display font (OFL) — swap `Theme.Fonts.display` to `.custom(...)`; needs the font file added to the bundle.
 - [ ] Merge Upgrades + Items into one "Hero" tab; hide Prestige until it unlocks.
 
+**3c-raid. Raid glow-up**
+
+Diagnosis (2026-10-29): the raid is the game's most interesting gamble on paper (stake blessings + the pot for soul shards) but plays as a short auto-fight — taps are just extra auto-attacks, the class ability / dodge / boss gimmicks are absent, the arena is a 300×160 letterbox, and the rest card says "Win ◈ shards" with no number, so it's a blind bet.
+
+Bugs — ✅ fixed (unit-tested in `oneMoreFloorTests/RaidTests.swift`):
+- [x] Reward mismatch: the result screen showed `max(1, floor/5)` shards but `completeRaid` paid `max(5, floor/3)`. Now both read `DungeonGame.raidShardReward`.
+- [x] A win silently restored pre-raid HP (raid damage lived only in `RaidScene`). `completeRaid(success:heroHpAfterRaid:)` now carries it back, clamped to 1…max.
+- [x] Blessing special effects were ignored in raids — War Surge (splash, labelled "raid only") did nothing anywhere. `RaidScene` now applies War Surge splash, Thorn Mantle reflection, and Blood Rush kill-heals with the dungeon's formulas.
+- [x] Raid crits used the class base chance; now `game.heroCritChance` (includes the legacy bonus).
+- *Not yet seen on screen:* the scene-side effects (splash/thorns/kill-heal) are covered by code review only — test runs kept dying at the floor-10 boss before reaching a rest site.
+
+Glow-up ideas (recommended order):
+- [ ] **Raid briefing** before committing: exact shard reward, stakes (blessing icons + pot), wave layout with boss silhouette, and a danger meter (hero power vs scaled enemies).
+- [ ] **Cash out between waves**: after waves 1 and 2, *Escape* (partial shards, no further risk) or *Press on* (all or nothing) — the game's push-your-luck decision inside the raid.
+- [ ] **Visual pass** reusing the battle screen: full-bleed `resizeFill` arena, wave pips, `GameBar` HP over each enemy, wave-intro slam + shake, boss entrance card, themed result screen.
+- [ ] **Agency**: tap an enemy to target it; bring the class ability and heavy-attack dodges into raids.
+- [ ] **Reward worth bragging about**: shards scale with greed; guaranteed rare+ drop on a clean win with a rarity-beam reveal; raid trophies for the collection codex.
+- [ ] **Dignified loss**: itemized "what you lost", a low-HP Retreat option. No paid raid entries or energy systems.
+
 **3d. Onboarding (FTUE)**
 - [ ] Replace the text-wall `IntroCardView` with teach-by-doing coach marks: first tap within 5s, guaranteed drop on floor 3, scripted first Rest decision by floor 5. *(Its current copy also says "stop tapping and your hero auto-battles," which is stale since the idle fallback was removed.)*
 - [ ] Move the notification permission prompt from cold launch to after the first Rest. The ATT prompt also fires on cold launch — consider deferring it too.

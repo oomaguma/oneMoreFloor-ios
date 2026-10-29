@@ -40,7 +40,11 @@ struct RaidView: View {
             heroAtk:  game.heroAtk,
             heroDef:  game.heroDef,
             zoneID:   game.currentZone.id,
-            floor:    game.currentFloor
+            floor:    game.currentFloor,
+            critChance:       game.heroCritChance,
+            splashFraction:   game.raidSplashFraction,
+            thornsFraction:   game.raidThornsFraction,
+            killHealFraction: game.raidKillHealFraction
         ))
     }
 
@@ -204,7 +208,8 @@ struct RaidView: View {
                 // Summarise what was gained or lost.
                 Group {
                     if success {
-                        let earned = max(1, game.currentFloor / 5)
+                        // Same number completeRaid() pays — one source of truth.
+                        let earned = game.raidShardReward
                         Text("+\(earned) Soul Shard\(earned == 1 ? "" : "s") earned!")
                             .foregroundStyle(Color.white.opacity(0.85))
                     } else {
@@ -217,7 +222,7 @@ struct RaidView: View {
 
                 // Continue — dismisses the raid and returns to the dungeon.
                 Button {
-                    game.completeRaid(success: success)
+                    game.completeRaid(success: success, heroHpAfterRaid: raidScene.heroHp)
                     // isRaidActive → false collapses RaidView from GameView's ZStack
                 } label: {
                     Text("CONTINUE")
