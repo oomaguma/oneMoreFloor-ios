@@ -200,6 +200,12 @@ struct GameOverOverlay: View {
                     Text("on floor \(game.currentFloor)")
                         .font(Theme.Fonts.label(15))
                         .foregroundStyle(Theme.Palette.dust)
+                    // Where this run ranks in the Hall of the Fallen.
+                    if let best = game.fallenHeroes.map(\.floor).max(), game.currentFloor > best {
+                        Label("Your deepest fall yet", systemImage: "crown.fill")
+                            .font(Theme.Fonts.label(12))
+                            .foregroundStyle(Theme.Palette.gold)
+                    }
                 }
 
                 if game.atRiskGold > 0 {
@@ -260,6 +266,17 @@ struct GameOverOverlay: View {
                             Text("Watch an ad to revive")
                                 .font(Theme.Fonts.label(11))
                                 .foregroundStyle(Theme.Palette.dust)
+                        }
+                    }
+
+                    // Share the tombstone — the run becomes a story worth telling.
+                    if let fall = game.currentFall {
+                        FallenShareButton(fall: fall) {
+                            Label("SHARE YOUR FALL", systemImage: "square.and.arrow.up")
+                                .font(Theme.Fonts.label(14))
+                                .foregroundStyle(Theme.Palette.parchment)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 40)
                         }
                     }
 

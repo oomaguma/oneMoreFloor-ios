@@ -186,9 +186,9 @@ Raid glow-up (2026-10-29):
 - [x] `Analytics.tutorialCompleted()` → PostHog `tutorial_completed`; compare with `character_selected` for the funnel.
 
 **3e. Retention loops (from the engagement-loop brainstorm)**
-- [ ] Hall of the Fallen — a memorial of dead heroes ("fell on floor 23 with 1,240g at ×3.4"). Identity + investment.
+- [x] **Hall of the Fallen** (2026-10-29, `Legacy/`): every run that ends in death (recorded on RESTART; a Second Wind revive doesn't count) is kept as a `FallenHero` — hero, floor, gold lost, greed, slayer, date — under its own UserDefaults key so "New Hero" doesn't wipe it (newest 50). Shown as a section in the Prestige tab (deepest fall crowned; tap for the tombstone card). The killer is saved with the run (SaveData v11 `lastSlayer`) so a relaunch still says "slain by X". Tests: `HallOfTheFallenTests`.
+- [x] **Shareable death card**: SHARE YOUR FALL on the game-over screen (and SHARE on each Hall entry) sends the tombstone as a PNG via the system share sheet, rendered only when shared (`FallenCardImage: Transferable`).
 - [ ] Bestiary (silhouettes fill in) and gear codex. Collection.
-- [ ] Shareable death/record card. Social + free ASO.
 - [ ] Next-boss silhouette preview; rare surprise events (mimic, golden goblin, merchant).
 - [ ] Later: daily seeded dungeon with a Game Center board.
 

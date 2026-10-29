@@ -50,7 +50,14 @@ struct RaidTests {
         // Damage taken in the raid sticks — a win no longer restores pre-raid HP.
         let game = gameInRaid(floor: 10)
         game.completeRaid(success: true, heroHpAfterRaid: 37)
-        #expect(game.heroHp == 37)
+        // The full-clear loot is random; if it was HP gear and got equipped, it
+        // adds its bonus to current HP too. Account for that, or the test flakes.
+        var expected = 37
+        if let loot = game.raidOutcome?.loot,
+           game.equippedItems[loot.slot.rawValue]?.id == loot.id {
+            expected += loot.hpBonus
+        }
+        #expect(game.heroHp == min(expected, game.heroMaxHp))
     }
 
     @Test func winNeverLeavesTheHeroDeadOrOverhealed() {

@@ -242,6 +242,22 @@ class DungeonGame {
     private(set) var retiredCharacterIDs: [String] = []
     private(set) var totalPrestiges: Int = 0
 
+    // MARK: - Hall of the Fallen
+    /// Every run that ended in death, newest first (see Legacy/HallOfTheFallen.swift).
+    private(set) var fallenHeroes: [FallenHero] = HallOfTheFallen.load()
+    /// The enemy that killed the hero in the foreground; nil after an offline death.
+    private var lastSlayer: String?
+
+    /// The memorial entry this death *would* become — shown on the game-over
+    /// screen (and its share card) before the player accepts it with RESTART.
+    var currentFall: FallenHero? {
+        guard isGameOver else { return nil }
+        let anchored = Int(Double(atRiskGold) * soulAnchorFraction)
+        return FallenHero(heroName: character.name, characterID: characterID,
+                          floor: currentFloor, goldLost: atRiskGold - anchored,
+                          greed: greedMultiplier, slainBy: lastSlayer, date: .now)
+    }
+
     var legacyHpBonus: Int {
         retiredCharacterIDs.reduce(0) { sum, id in sum + (CharacterClass.all.first { c in c.id == id }?.legacyBonus.hp ?? 0) }
     }
@@ -517,6 +533,7 @@ class DungeonGame {
             }
             isGameOver = true
             inCombat   = false
+            lastSlayer = monsterName.isEmpty ? nil : monsterName
             Analytics.heroDied(floor: currentFloor, deepestEver: deepestFloorEver)
             log("Hero has fallen. Tap Restart to try again.")
             onHeroDeath?()
@@ -537,6 +554,12 @@ class DungeonGame {
     }
 
     func restart() {
+        // The player accepted the death: carve it into the Hall of the Fallen
+        // (a Second Wind revive never reaches here, so it doesn't count).
+        if let fall = currentFall {
+            fallenHeroes = HallOfTheFallen.record(fall)
+        }
+        lastSlayer = nil
         stripActiveEffects()
         usableItems         = []
         pendingFloorEvent   = nil
@@ -1776,6 +1799,9 @@ class DungeonGame {
         // state, so quitting can't skip a rest-site choice or escape a raid.
         var pendingRestSite: Bool?
         var isRaidActive: Bool?
+        // v11: who killed the hero, so a relaunch on the game-over screen
+        // still records "slain by X" in the Hall of the Fallen.
+        var lastSlayer: String?
     }
 
     private static let saveKey = "dungeonSave_v2"
@@ -1822,7 +1848,8 @@ class DungeonGame {
             greedMultiplier: greedMultiplier,
             atRiskGold: atRiskGold,
             pendingRestSite: pendingRestSite,
-            isRaidActive: isRaidActive
+            isRaidActive: isRaidActive,
+            lastSlayer: lastSlayer
         )
         if let encoded = try? JSONEncoder().encode(data) {
             UserDefaults.standard.set(encoded, forKey: Self.saveKey)
@@ -1892,6 +1919,7 @@ class DungeonGame {
         atRiskGold           = data.atRiskGold           ?? 0
         pendingRestSite      = data.pendingRestSite      ?? false
         isRaidActive         = data.isRaidActive         ?? false
+        lastSlayer           = data.lastSlayer
 
         displayMonsterHp    = inCombat ? max(0, monsterHp) : 0
         displayMonsterMaxHp = inCombat ? monsterMaxHp : 0

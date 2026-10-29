@@ -94,6 +94,10 @@ struct PrestigeTabView: View {
                     LegacyBonusSectionView(retiredIDs: game.retiredCharacterIDs)
                 }
 
+                // Every run that ended in death, remembered (and shareable).
+                HallOfTheFallenSection(fallen: game.fallenHeroes)
+                    .padding(.top, 8)
+
                 Button(action: onChangeCharacter) {
                     HStack {
                         Image(systemName: "person.2.fill")
