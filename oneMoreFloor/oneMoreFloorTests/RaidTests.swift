@@ -89,4 +89,25 @@ struct RaidTests {
         #expect(game.thornsFraction == 0.20)
         #expect(game.killHealFraction == 0.08)
     }
+
+    // MARK: - Tuning (RaidScene knobs)
+
+    @Test func wavesGrowTwoThreeFour() {
+        #expect((1...3).map { RaidScene.enemyCount(wave: $0) } == [2, 3, 4])
+    }
+
+    @Test func raidEnemiesAreScaledDown() {
+        // The floor-11 Crypts boss (Armored Skeleton): 162 HP / 19 ATK in a normal fight.
+        #expect(RaidScene.raidScaled(162, by: RaidScene.enemyHpScale) == 72)
+        #expect(RaidScene.raidScaled(19,  by: RaidScene.enemyAtkScale) == 10)
+    }
+
+    @Test func scaledStatsNeverDropBelowOne() {
+        #expect(RaidScene.raidScaled(1, by: RaidScene.enemyHpScale) == 1)
+    }
+
+    @Test func breatherHealIsAShareOfMaxHp() {
+        // 15% of a 120-HP hero → 18 between waves.
+        #expect(RaidScene.raidScaled(120, by: RaidScene.breatherHealFraction) == 18)
+    }
 }

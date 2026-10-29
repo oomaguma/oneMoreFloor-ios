@@ -127,6 +127,31 @@ class RaidScene: SKScene {
     private let thornsFraction:   Double   // Thorn Mantle: share of incoming damage reflected
     private let killHealFraction: Double   // Blood Rush: share of max HP restored per kill
 
+    // MARK: - Tuning knobs (first draft, 2026-10-29 — tune in playtest)
+    //
+    // Raid enemies used full single-fight stats but arrive several at a time,
+    // so the first raid (floor 11, right after the floor-10 boss) was
+    // unwinnable however you played. A Monte Carlo of this scene's timings
+    // (hero entering at 60% HP, fresh Soldier, floor 11) with these values:
+    //   AUTO only: lose · casual tapping (~2/s): ~50% · engaged tapping: win ·
+    //   blessings without tapping: ~55%.
+    // So idling loses, skill matters, and staking blessings pays off.
+
+    /// Share of a normal floor enemy's HP a raid enemy gets.
+    static let enemyHpScale:  Double = 0.45
+    /// Share of a normal floor enemy's ATK a raid enemy gets.
+    static let enemyAtkScale: Double = 0.55
+    /// HP restored during the breather between waves, as a share of max HP.
+    static let breatherHealFraction: Double = 0.15
+
+    /// Enemies per wave: 2, 3, 4 (was 3, 4, 5).
+    static func enemyCount(wave: Int) -> Int { wave + 1 }
+
+    /// A stat scaled for raid use. Never drops below 1.
+    static func raidScaled(_ stat: Int, by scale: Double) -> Int {
+        max(1, Int(Double(stat) * scale))
+    }
+
     // MARK: - Mutable raid state
 
     private var wave       = 0
@@ -266,7 +291,7 @@ class RaidScene: SKScene {
 
         let pool     = DungeonGame.zoneEnemyPools[zoneID] ?? [EnemyType.skeleton]
         let bossType = DungeonGame.zoneBossEnemies[zoneID]
-        let count    = wave + 2   // wave 1 → 3 enemies, wave 2 → 4, wave 3 → 5
+        let count    = Self.enemyCount(wave: wave)   // 2, 3, 4
 
         // Y offsets create a loose cluster so enemies don't all stack on top of each other.
         let yOffsets: [CGFloat] = [0, -10, 10, -5, 5]
@@ -278,8 +303,10 @@ class RaidScene: SKScene {
                 ? (bossType ?? pool.randomElement()!)
                 : (pool.randomElement()!)
 
-            let hp  = eType.scaledHp(floor: floor, isBoss: isBossEnemy)
-            let atk = eType.scaledAtk(floor: floor, isBoss: isBossEnemy)
+            // Raid enemies are a scaled-down version of the floor's enemy,
+            // because they come in groups (see the tuning knobs above).
+            let hp  = Self.raidScaled(eType.scaledHp(floor: floor, isBoss: isBossEnemy),  by: Self.enemyHpScale)
+            let atk = Self.raidScaled(eType.scaledAtk(floor: floor, isBoss: isBossEnemy), by: Self.enemyAtkScale)
 
             let enemy = RaidEnemy(
                 name: eType.name, hp: hp, atk: atk, isBoss: isBossEnemy,
@@ -535,6 +562,13 @@ class RaidScene: SKScene {
         } else {
             floatText("WAVE CLEAR!", at: CGPoint(x: 150, y: 95),
                       color: UIColor(red: 0.30, green: 0.90, blue: 0.40, alpha: 1), fontSize: 16)
+
+            // Breather: catch your breath before the next wave.
+            let heal = Self.raidScaled(heroMaxHp, by: Self.breatherHealFraction)
+            heroHp = min(heroMaxHp, heroHp + heal)
+            onHeroHpChanged?(heroHp, heroMaxHp)
+            floatText("+\(heal)", at: CGPoint(x: 44, y: 84),
+                      color: UIColor(red: 0.20, green: 0.90, blue: 0.38, alpha: 1))
             run(.sequence([
                 .wait(forDuration: 1.8),
                 .run { [weak self] in self?.startNextWave() }
