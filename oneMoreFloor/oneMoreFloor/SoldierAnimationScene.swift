@@ -58,6 +58,23 @@ class IdlePreviewScene: SKScene {
 
 class CombatScene: SKScene {
 
+    // MARK: Layout model
+    //
+    // The fight is authored in a fixed 200×200 "design space" (hero at x 50,
+    // enemy at x 150, feet around y 35). All gameplay nodes — sprites,
+    // projectiles, floating numbers — live inside `world`, which is scaled
+    // and positioned to fit whatever size the SpriteView gives us. The zone
+    // backdrop sits *outside* `world` and simply fills the view.
+    //
+    // Why: the glow-up made the arena full-bleed and tall. With the old fixed
+    // 200×200 scene + `.aspectFill`, a tall view zoomed in until the fighters
+    // were cropped off the edges. Now the fighters always fit the width.
+
+    private let world = SKNode()
+    private static let designWidth: CGFloat = 200
+    private static let designFeetY: CGFloat = 35      // where sprite feet land in design space
+    private static let floorBand:   CGFloat = 0.28    // backdrop floor = bottom 28% of each bg image
+
     private var bgNode: SKSpriteNode!
     private var heroNode: SKSpriteNode!
     private var enemyNode: SKSpriteNode!
@@ -100,7 +117,9 @@ class CombatScene: SKScene {
         currentEnemy  = initialEnemy
         currentZoneID = initialZoneID
         super.init(size: CGSize(width: 200, height: 200))
-        scaleMode       = .aspectFill
+        // resizeFill: the scene's size tracks the view's size in points, and
+        // `layoutForSize()` places everything to match.
+        scaleMode       = .resizeFill
         backgroundColor = .clear
     }
 
@@ -109,36 +128,68 @@ class CombatScene: SKScene {
     override func didMove(to view: SKView) {
         view.backgroundColor = .clear
 
-        // Zone background — sits behind all sprites. Sized to cover the visible
-        // (aspectFill-cropped) area of the 200x200 scene on every phone width.
+        // Zone background — fills the whole view behind the fight. Anchored at
+        // its bottom edge so the floor stays planted; sized in layoutForSize().
         bgNode = SKSpriteNode(texture: backgroundTexture(for: currentZoneID))
-        bgNode.position  = CGPoint(x: 100, y: 100)
-        bgNode.size      = CGSize(width: 360, height: 360 * 270.0 / 480.0) // keep 16:9
-        bgNode.zPosition = -10
+        bgNode.anchorPoint = CGPoint(x: 0.5, y: 0)
+        bgNode.zPosition   = -10
         // Dim the backdrop so the character sprites stand out against it.
         bgNode.color            = .black
         bgNode.colorBlendFactor = 0.4
         addChild(bgNode)
+        addChild(world)
 
         loadHeroFrames()
         heroNode = SKSpriteNode(texture: heroIdleFrames.first)
         heroNode.setScale(2.5)
         heroNode.position = CGPoint(x: 50, y: 76)
-        addChild(heroNode)
+        world.addChild(heroNode)
 
         loadEnemyFrames(currentEnemy)
         enemyNode = SKSpriteNode(texture: enemyIdleFrames.first)
         enemyNode.setScale(2.5)
         enemyNode.position = CGPoint(x: 150, y: 76)
         enemyNode.xScale   = -2.5
-        addChild(enemyNode)
+        world.addChild(enemyNode)
 
         isReady = true
+        layoutForSize()
         playHeroIdle()
         playEnemyIdle()
     }
 
     // MARK: - Frame loading
+
+    // MARK: - Layout
+
+    override func didChangeSize(_ oldSize: CGSize) {
+        super.didChangeSize(oldSize)
+        layoutForSize()
+    }
+
+    /// Fits the design space to the current view size:
+    ///  1. The backdrop aspect-fills the view (16:9 art, anchored at the bottom).
+    ///  2. `world` scales so the 200-wide fight spans the screen width — capped
+    ///     on short/wide views (iPad, landscape) so sprites never get huge.
+    ///  3. `world` shifts vertically so sprite feet stand inside the
+    ///     backdrop's floor band instead of floating on the wall.
+    private func layoutForSize() {
+        guard isReady, size.width > 0, size.height > 0 else { return }
+
+        // 1. Backdrop.
+        let bgHeight = max(size.height, size.width * 270.0 / 480.0)
+        bgNode.size     = CGSize(width: bgHeight * 480.0 / 270.0, height: bgHeight)
+        bgNode.position = CGPoint(x: size.width / 2, y: 0)
+
+        // 2. World scale.
+        let k = min(size.width / Self.designWidth, size.height / 170)
+        world.setScale(k)
+
+        // 3. Feet a bit under halfway up the floor band.
+        let feetY = bgHeight * Self.floorBand * 0.45
+        world.position = CGPoint(x: (size.width - Self.designWidth * k) / 2,
+                                 y: feetY - Self.designFeetY * k)
+    }
 
     private func frames(_ spec: AnimationSpec) -> [SKTexture] { buildFrames(spec) }
 
@@ -339,6 +390,19 @@ class CombatScene: SKScene {
         enemyNode.run(grow, withKey: "tapPop")
     }
 
+    // MARK: - Hit-stop
+
+    /// Freezes the whole scene for a split second, then resumes. Fighting games
+    /// do this on big hits so the impact registers before the action moves on.
+    /// It's ~4 frames, short enough to feel like weight rather than lag.
+    func hitStop(_ duration: TimeInterval) {
+        guard isReady, !isPaused else { return }
+        isPaused = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            self?.isPaused = false
+        }
+    }
+
     // MARK: - Heavy-attack telegraph (Phase 2b)
 
     /// Signal that the enemy is charging a heavy attack: a few scale pulses plus
@@ -372,7 +436,7 @@ class CombatScene: SKScene {
         arrow.position  = fromHero ? CGPoint(x: 65, y: 70) : CGPoint(x: 135, y: 70)
         let destX: CGFloat = fromHero ? 145 : 55
         arrow.run(.sequence([.moveTo(x: destX, duration: 0.28), .removeFromParent()]))
-        addChild(arrow)
+        world.addChild(arrow)
     }
 
     // MARK: - Floating combat text
@@ -396,9 +460,11 @@ class CombatScene: SKScene {
         run(.sequence([
             .wait(forDuration: heroHitDelay),
             .run { [weak self] in
-                self?.floatText("⚡\(amount)", at: CGPoint(x: 156, y: 81),
+                self?.floatText("\(amount)!", at: CGPoint(x: 156, y: 86),
                                 color: UIColor(red: 1.0, green: 0.88, blue: 0.12, alpha: 1),
-                                fontSize: 18)
+                                fontSize: 22)
+                // Crits freeze the action for a few frames — the impact "lands".
+                self?.hitStop(0.07)
             }
         ]))
     }
@@ -419,13 +485,19 @@ class CombatScene: SKScene {
     }
 
     private func floatText(_ text: String, at base: CGPoint, color: UIColor, fontSize: CGFloat = 14) {
-        let label = SKLabelNode(fontNamed: "Courier-Bold")
-        label.text      = text
-        label.fontSize  = fontSize
-        label.fontColor = color
+        // Heavy font with a thick black outline, so numbers pop off the busy
+        // pixel-art backdrop instead of dissolving into it (the old Courier did).
+        let font = UIFont(name: "AvenirNext-Heavy", size: fontSize) ?? .boldSystemFont(ofSize: fontSize)
+        let label = SKLabelNode()
+        label.attributedText = NSAttributedString(string: text, attributes: [
+            .font: font,
+            .foregroundColor: color,
+            .strokeColor: UIColor.black,
+            .strokeWidth: -5.0          // negative = fill AND stroke
+        ])
         label.position  = CGPoint(x: base.x + CGFloat.random(in: -8...8), y: base.y)
         label.zPosition = 20
-        addChild(label)
+        world.addChild(label)
 
         let moveUp = SKAction.moveBy(x: 0, y: 34, duration: 0.80)
         let fade   = SKAction.sequence([

@@ -1,6 +1,6 @@
 # oneMoreFloor — The Overhaul
 
-**Status:** Phases 1 & 2 complete & compiling clean (2026-06-22), under active playtest/tuning. Phase 3 (UI overhaul + onboarding + ASO) and Phase 4 (monetization) not started; some Phase 4 rewarded-ad placements landed early.
+**Status:** Phases 1 & 2 complete & compiling clean (2026-06-22), under active playtest/tuning. Phase 3 (UI overhaul) in progress on `feature/glow-up` (2026-10-29): design system + battle screen + title/upgrades/rest-site restyled; onboarding, remaining screens, and ASO still to do. Phase 4 (monetization) not started; some Phase 4 rewarded-ad placements landed early.
 **Goal:** Turn a passive idle game into the push-your-luck climber its title promises.
 
 This is the living design + build spec for the overhaul. It is the source of truth — keep it current as we build. When a mechanic changes in code, change it here too.
@@ -104,10 +104,49 @@ The smallest change that fixes the dead first session. Ship it, watch D1/D7 move
 
 **Idle fallback — tried, then removed (2026-06-22):** an idle fallback briefly auto-took turns after 3s of no tap so the screen wouldn't freeze. But it fired regardless of the Auto toggle, so turning Auto *off* still auto-battled — confusing. Removed: the **Auto toggle is now the sole auto-battle control** (off = pure manual, waits for taps; on = hands-off). Idle progress comes from turning Auto on, or backgrounding the app (offline sim). Lesson: one explicit control beats an implicit one that contradicts it.
 
-### Phase 3 — UI overhaul + onboarding + the App Store listing
-- Full visual polish pass on every screen.
-- A first-session tutorial that teaches tap + the push-your-luck choice in <60s.
-- ASO: new icon, screenshots that show the greed tension, keyword/title optimization. (Partly outside the code.)
+### Phase 3 — UI overhaul ("the glow-up") + onboarding + the App Store listing
+
+**Diagnosis (2026-10-29):** the systems were good but the game was *dressed like a settings screen*: five equal-weight bordered cards stacked vertically, monospaced system font everywhere, the (good) pixel art squeezed into a 230pt letterbox, a fifth of the screen spent on an empty strike pad, and greed — the game's identity — shown as a 7pt progress bar.
+
+**Principles:**
+- **The dungeon is the screen.** Art runs full-bleed; UI floats over it.
+- **One design system.** All color/type/panels/buttons/bars come from `Theme/Theme.swift`. No new raw `Color(red:…)` or `.monospaced` in views.
+- **Feel it, don't read it.** Greed heats the screen; hits shake and freeze; the pot bounces.
+- **Thumb zone rule still holds:** bottom = intended actions only (ability + STRIKE). REST moved to the *top* so mashing can't bank by accident.
+- **Healthy loops only:** no guilt streaks, fake-scarcity timers, or selling greed / at-risk gold for real money.
+
+**3a. Foundation — ✅ done**
+- [x] Split the 3,645-line `ContentView.swift` into per-screen files: `Screens/`, `Battle/`, `Overlays/`, `HUD/`, `Navigation/`, `Tabs/` (Xcode synchronized folders pick them up automatically). Code moved verbatim; only `GameTab` / `CustomGameTabBar` lost `private`.
+- [x] `Theme/Theme.swift`: warm torch-lit palette, `Theme.greedColor(_:)` heat ramp, rounded heavy display type + `.gameShadow()` (hard pixel drop shadow), `.gamePanel()` bevelled stone panels, `ChunkyButtonStyle` (3D press-down buttons), `GameBar` (glossy meter with a lagging "ghost" damage trail).
+
+**3b. Battle screen — ✅ done (needs playtest)**
+- [x] Full-bleed arena: `CombatScene` now uses `.resizeFill` + a `world` container (design space 200 wide, scaled to the view width) with the zone backdrop filling the view and its floor band under the fighters' feet. Fixes the crop/zoom a tall view caused with the old `.aspectFill`.
+- [x] Floating HUD: `BattleHeaderView` (floor, zone, **personal-best marker** "BEST 14 · 2 to go" / "NEW BEST" once your record is floor 5+), `GreedGaugeView` (flame + heat-colored multiplier + at-risk pot + REST), `VersusBarsView` (fighting-game HP bars draining toward the center).
+- [x] Tap-anywhere-to-strike on the open dungeon, plus a chunky STRIKE button beside a square ability button with a draining cooldown shade. Heavy telegraph splits STRIKE into DODGE / STRIKE and disables tap-anywhere (the choice must be deliberate) with a pulsing `HeavyWarningView`.
+- [x] Juice: greed heat vignette + embers scale with greed; screen shake on crits/death; red edge flash on hero hurt; crit hit-stop (`CombatScene.hitStop`); outlined heavy damage numbers; pot bounce.
+
+**3c. Screen restyles**
+- [x] Title buttons → chunky (gold primary).
+- [x] Tab bar → stone/gold theme with glowing selected icon.
+- [x] Upgrades → icon tiles per stat, level badges, gold chunky buy buttons.
+- [x] Rest site card → pot as the headline number, chunky DESCEND / REST / RAID.
+- [ ] Character select, Items, Prestige, Quests, floor-event card, game-over / boss-victory / offline overlays, Settings, Store.
+- [ ] Pixel display font (OFL) — swap `Theme.Fonts.display` to `.custom(...)`; needs the font file added to the bundle.
+- [ ] Merge Upgrades + Items into one "Hero" tab; hide Prestige until it unlocks.
+
+**3d. Onboarding (FTUE)**
+- [ ] Replace the text-wall `IntroCardView` with teach-by-doing coach marks: first tap within 5s, guaranteed drop on floor 3, scripted first Rest decision by floor 5. *(Its current copy also says "stop tapping and your hero auto-battles," which is stale since the idle fallback was removed.)*
+- [ ] Move the notification permission prompt from cold launch to after the first Rest. The ATT prompt also fires on cold launch — consider deferring it too.
+
+**3e. Retention loops (from the engagement-loop brainstorm)**
+- [ ] Hall of the Fallen — a memorial of dead heroes ("fell on floor 23 with 1,240g at ×3.4"). Identity + investment.
+- [ ] Bestiary (silhouettes fill in) and gear codex. Collection.
+- [ ] Shareable death/record card. Social + free ASO.
+- [ ] Next-boss silhouette preview; rare surprise events (mimic, golden goblin, merchant).
+- [ ] Later: daily seeded dungeon with a Game Center board.
+
+**3f. ASO**
+- [ ] New screenshots that show the greed tension (the new battle screen is the hero shot), keyword/title pass. (Partly outside the code.)
 
 ### Phase 4 — Monetization rework
 Mostly waits until retention is proven. **Principle: rewarded / opt-in only — no forced interstitials, which would worsen the very retention we're fixing.**
@@ -128,7 +167,7 @@ Still to do:
 ### Files in play
 - `DungeonGame.swift` — the model. All combat/economy/state changes live here.
 - `CombatScene` (`SoldierAnimationScene.swift`) — callback-driven; add the tap target + tap juice.
-- `ContentView.swift` — `GameView` owns the loop (`.task` calling `tick()`) and the battle UI.
+- `Screens/GameView.swift` — `GameView` owns the loop (`.task` calling `tick()`), wires combat callbacks, hosts overlays. The battle UI lives in `Battle/BattleViews.swift`; shared styling in `Theme/Theme.swift`.
 
 ### The duplicated-combat-logic problem (fix in 1a)
 Combat rules are currently written **three times**: `doCombatTick()` (live), `simulateOffline()` (offline), and `estimatedSecondsUntilFirstDeath()` (death-notification timing). Any combat change must touch all three or they silently drift. Phase 1a extracts the shared *formulas* (enemy scaling, gold reward) into single helpers so the rules live in one place. We deliberately do **not** merge the whole loop — the offline sim is intentionally headless/simplified (no callbacks, no crit) for speed. We only de-duplicate the formulas, not the orchestration. (Keep it simple — no over-engineering.)

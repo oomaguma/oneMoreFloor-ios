@@ -21,7 +21,8 @@
 
 - **Language:** Swift / SwiftUI
 - **Game engine:** SpriteKit (for combat animations in `SoldierAnimationScene.swift`)
-- **Architecture:** `DungeonGame` is the central game state model. `ContentView.swift` / `GameView` owns the UI and drives the game loop via a SwiftUI `.task` that calls `game.tick()` on a timer interval.
+- **Architecture:** `DungeonGame` is the central game state model. `ContentView.swift` is the root router; `Screens/GameView.swift` owns the UI and drives the game loop via a SwiftUI `.task` that calls `game.tick()` on a timer interval. Views are split by area under `Screens/`, `Battle/`, `Overlays/`, `HUD/`, `Navigation/`, `Tabs/`.
+- **Design system:** `Theme/Theme.swift` holds the palette, fonts, `.gamePanel()`, `ChunkyButtonStyle`, and `GameBar`. Use these tokens instead of raw `Color(red:…)` / `.monospaced` fonts in new or touched views.
 - **Monetization:** Google Mobile Ads, UMP (consent), StoreKit (IAP via `StoreManager`)
 - **Analytics:** PostHog (`AnalyticsManager`)
 - **Persistence:** Custom JSON save/load in `DungeonGame`
