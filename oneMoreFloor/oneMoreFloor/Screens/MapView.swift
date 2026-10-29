@@ -12,12 +12,12 @@ struct MapView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("\(game.currentZone.icon)  \(game.currentZone.name)")
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .font(Theme.Fonts.label(13))
                     .foregroundStyle(.white)
                 Spacer()
                 if game.deepestFloorEver > 0 {
                     Text("BEST: \(DungeonGame.stageLabel(floor: game.deepestFloorEver))")
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(Theme.Fonts.body(11))
                         .foregroundStyle(Color.white.opacity(0.75))
                 }
             }
@@ -38,7 +38,7 @@ struct MapView: View {
                                 if idx < DungeonGame.zones.count - 1 {
                                     Rectangle()
                                         .fill(zone.maxFloor != nil && game.currentFloor > zone.maxFloor!
-                                              ? Color(white: 0.38) : Color(white: 0.18))
+                                              ? Color(white: 0.38) : Theme.Palette.stoneHi)
                                         .frame(width: 16, height: 2)
                                 }
                             }
@@ -78,16 +78,16 @@ struct ZoneNodeView: View {
                     .stroke(borderColor, lineWidth: isCurrent ? 2.5 : 1.5)
                     .frame(width: 40, height: 40)
                 Text(zone.icon)
-                    .font(.system(size: 18, design: .monospaced))
+                    .font(Theme.Fonts.body(18))
                     .foregroundStyle(Color.white.opacity(iconOpacity))
             }
             Text(zone.shortName)
-                .font(.system(size: 9, design: .monospaced))
+                .font(Theme.Fonts.body(9))
                 .foregroundStyle(isCurrent ? Color.white : Color.white.opacity(textOpacity))
                 .multilineTextAlignment(.center)
                 .frame(width: 54)
             Text("Fl.\(zone.minFloor)\(zone.maxFloor.map { "-\($0)" } ?? "+")")
-                .font(.system(size: 8, design: .monospaced))
+                .font(Theme.Fonts.body(8))
                 .foregroundStyle(Color.white.opacity(0.30))
         }
     }
@@ -96,14 +96,14 @@ struct ZoneNodeView: View {
         if isCurrent   { return Color(red: 0.12, green: 0.28, blue: 0.62) }
         if isPast      { return Color(white: 0.22) }
         if everReached { return Color(white: 0.12) }
-        return Color(white: 0.08)
+        return Theme.Palette.stone
     }
 
     private var borderColor: Color {
         if isCurrent   { return Color(red: 0.45, green: 0.72, blue: 1.00) }
         if isPast      { return Color(white: 0.50) }
         if everReached { return Color(white: 0.28) }
-        return Color(white: 0.15)
+        return Theme.Palette.stoneHi
     }
 
     private var iconOpacity: Double {

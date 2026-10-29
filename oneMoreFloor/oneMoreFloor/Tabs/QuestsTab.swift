@@ -12,12 +12,13 @@ struct QuestsTabView: View {
         ScrollView {
             VStack(spacing: 10) {
                 HStack {
-                    Text("DAILY QUESTS")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.65))
+                    Text("QUESTS")
+                        .font(Theme.Fonts.display(22))
+                        .foregroundStyle(Theme.Palette.parchment)
+                        .gameShadow()
                     Spacer()
                     Text("Resets at midnight")
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(Theme.Fonts.body(11))
                         .foregroundStyle(Color.white.opacity(0.45))
                 }
                 .padding(.horizontal, 4)
@@ -30,7 +31,7 @@ struct QuestsTabView: View {
 
                 if game.dailyQuests.isEmpty {
                     Text("No quests available.\nCheck back tomorrow.")
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(Theme.Fonts.body(13))
                         .foregroundStyle(Color.white.opacity(0.35))
                         .multilineTextAlignment(.center)
                         .padding(.vertical, 32)
@@ -51,7 +52,7 @@ struct QuestsTabView: View {
             .padding(.top, 14)
             .padding(.bottom, 32)
         }
-        .background(Color(red: 0.07, green: 0.07, blue: 0.11))
+        .background(Theme.Palette.abyss)
     }
 }
 
@@ -64,10 +65,10 @@ struct QuestRowView: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(quest.title)
-                        .font(.system(size: 15, design: .monospaced))
+                        .font(Theme.Fonts.body(15))
                         .foregroundStyle(quest.claimed ? Color.white.opacity(0.35) : .white)
                     Text(quest.description)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(Theme.Fonts.body(12))
                         .foregroundStyle(Color.white.opacity(0.55))
                 }
                 Spacer()
@@ -79,7 +80,7 @@ struct QuestRowView: View {
                     } else if quest.isComplete {
                         Button(action: onClaim) {
                             Text("+\(quest.rewardGold)g")
-                                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                .font(Theme.Fonts.label(14))
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
                                 .background(Color(red: 0.20, green: 0.55, blue: 0.25))
@@ -90,10 +91,10 @@ struct QuestRowView: View {
                     } else {
                         VStack(alignment: .trailing, spacing: 2) {
                             Text(quest.progressLabel)
-                                .font(.system(size: 12, weight: .medium, design: .monospaced).monospacedDigit())
+                                .font(Theme.Fonts.number(12))
                                 .foregroundStyle(Color.white.opacity(0.55))
                             Text("+\(quest.rewardGold)g")
-                                .font(.system(size: 12, design: .monospaced))
+                                .font(Theme.Fonts.body(12))
                                 .foregroundStyle(Color.yellow.opacity(0.65))
                         }
                     }
@@ -102,27 +103,18 @@ struct QuestRowView: View {
 
             // Progress bar
             if !quest.claimed {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color(white: 0.16))
-                            .frame(height: 5)
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(quest.isComplete
-                                  ? Color(red: 0.25, green: 0.80, blue: 0.40)
-                                  : Color(red: 0.35, green: 0.62, blue: 1.00))
-                            .frame(width: geo.size.width * quest.progressFraction, height: 5)
-                    }
-                }
-                .frame(height: 5)
-                .animation(.easeOut(duration: 0.25), value: quest.progressFraction)
+                // Gold while in progress, green when done — the themed meter.
+                GameBar(fraction: quest.progressFraction,
+                        color: quest.isComplete ? Theme.Palette.life : Theme.Palette.gold,
+                        height: 7, showsGhost: false)
+                    .animation(.easeOut(duration: 0.25), value: quest.progressFraction)
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(quest.claimed ? Color(white: 0.07) : Color(white: 0.10))
+                .fill(quest.claimed ? Theme.Palette.stone : Theme.Palette.stone)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
                         .stroke(
@@ -149,10 +141,10 @@ struct DailyCompletionBonusView: View {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Daily Champion")
-                        .font(.system(size: 15, design: .monospaced))
+                        .font(Theme.Fonts.body(15))
                         .foregroundStyle(bonusClaimed ? Color.white.opacity(0.35) : .white)
                     Text("Complete all \(questCount) daily quests")
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(Theme.Fonts.body(12))
                         .foregroundStyle(Color.white.opacity(0.55))
                 }
                 Spacer()
@@ -164,7 +156,7 @@ struct DailyCompletionBonusView: View {
                     } else if allClaimed {
                         Button(action: onClaim) {
                             Text("+\(shards) ◈")
-                                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                .font(Theme.Fonts.label(14))
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 8)
                                 .background(Color(red: 0.55, green: 0.30, blue: 0.75))
@@ -174,7 +166,7 @@ struct DailyCompletionBonusView: View {
                         .buttonStyle(.plain)
                     } else {
                         Text("+\(shards) ◈")
-                            .font(.system(size: 10, design: .monospaced))
+                            .font(Theme.Fonts.body(10))
                             .foregroundStyle(Color.white.opacity(0.28))
                     }
                 }
@@ -185,7 +177,7 @@ struct DailyCompletionBonusView: View {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
                         RoundedRectangle(cornerRadius: 3)
-                            .fill(Color(white: 0.16))
+                            .fill(Theme.Palette.stoneHi)
                             .frame(height: 5)
                         RoundedRectangle(cornerRadius: 3)
                             .fill(allClaimed
@@ -201,7 +193,7 @@ struct DailyCompletionBonusView: View {
         .padding(.vertical, 12)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .fill(bonusClaimed ? Color(white: 0.07) : Color(white: 0.10))
+                .fill(bonusClaimed ? Theme.Palette.stone : Theme.Palette.stone)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
                         .stroke(

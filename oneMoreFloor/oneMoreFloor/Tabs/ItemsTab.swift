@@ -49,9 +49,10 @@ struct ItemsTabView: View {
             // Fixed equipped section
             VStack(spacing: 14) {
                 HStack {
-                    Text("EQUIPPED GEAR")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Color.white.opacity(0.65))
+                    Text("GEAR")
+                        .font(Theme.Fonts.display(22))
+                        .foregroundStyle(Theme.Palette.parchment)
+                        .gameShadow()
                     Spacer()
                     if !game.inventory.isEmpty {
                         Button(action: { game.optimizeEquipment() }) {
@@ -59,15 +60,16 @@ struct ItemsTabView: View {
                                 Image(systemName: "sparkles")
                                     .font(.system(size: 11))
                                 Text("OPTIMIZE")
-                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                    .font(Theme.Fonts.label(11))
                             }
                             .foregroundStyle(.white)
                             .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color(red: 0.18, green: 0.42, blue: 0.22))
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(ChunkyButtonStyle(face: Theme.Palette.life.mix(with: .black, by: 0.3),
+                                                       lip: Theme.Palette.lifeDeep.mix(with: .black, by: 0.4),
+                                                       cornerRadius: 10, depth: 3))
+                        .fixedSize()
+                        .frame(height: 34)
                     }
                 }
 
@@ -81,6 +83,9 @@ struct ItemsTabView: View {
                         )
                     }
                 }
+                // Natural height only: without this the cards' spacers soak up
+                // all the spare sheet height and balloon to ~340pt tall.
+                .fixedSize(horizontal: false, vertical: true)
 
                 if let bonus = game.appliedSetBonus {
                     SetBonusCardView(rarity: bonus, summary: game.setBonusSummary(bonus))
@@ -99,7 +104,7 @@ struct ItemsTabView: View {
                     let charms = game.usableItems.filter { $0.kind == .revive }
                     if !charms.isEmpty {
                         Text("CONSUMABLES  \(game.usableItems.count)/\(DungeonGame.usableItemLimit)")
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .font(Theme.Fonts.label(12))
                             .foregroundStyle(Color.white.opacity(0.65))
                             .padding(.horizontal, 4)
 
@@ -116,7 +121,7 @@ struct ItemsTabView: View {
 
                     if !game.inventory.isEmpty {
                         Text("INVENTORY  \(game.inventory.count)/\(EquipmentDrop.inventoryLimit)")
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .font(Theme.Fonts.label(12))
                             .foregroundStyle(Color.white.opacity(0.65))
                             .padding(.horizontal, 4)
 
@@ -129,7 +134,7 @@ struct ItemsTabView: View {
                         }
                     } else if game.equippedItems.isEmpty && charms.isEmpty {
                         Text("Items drop from enemies as you fight.\nCheck back after a few battles.")
-                            .font(.system(size: 13, design: .monospaced))
+                            .font(Theme.Fonts.body(13))
                             .foregroundStyle(Color.white.opacity(0.40))
                             .multilineTextAlignment(.center)
                             .padding(.vertical, 24)
@@ -141,7 +146,7 @@ struct ItemsTabView: View {
                 .padding(.bottom, 32)
             }
         }
-        .background(Color(red: 0.07, green: 0.07, blue: 0.11))
+        .background(Theme.Palette.abyss)
     }
 }
 
@@ -156,7 +161,7 @@ struct EquippedGearCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(slot.label.uppercased())
-                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                .font(Theme.Fonts.label(8))
                 .foregroundStyle(Color.white.opacity(0.40))
                 .padding(.bottom, 8)
 
@@ -165,14 +170,14 @@ struct EquippedGearCard: View {
                     .padding(.bottom, 8)
 
                 Text(item.name)
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .font(Theme.Fonts.label(11))
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 4)
 
                 Text(item.rarity.label)
-                    .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                    .font(Theme.Fonts.label(9))
                     .foregroundStyle(item.rarity.uiColor)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
@@ -181,7 +186,7 @@ struct EquippedGearCard: View {
                     .padding(.bottom, 8)
 
                 Text(item.statSummary)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(Theme.Fonts.body(10))
                     .foregroundStyle(Color.white.opacity(0.60))
                     .lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true)
@@ -189,16 +194,15 @@ struct EquippedGearCard: View {
                 Spacer(minLength: 10)
 
                 HStack(spacing: 6) {
+                    // Sell for gold — a small chunky gold coin button.
                     Button(action: onSell) {
                         Text("\(item.sellValue)g")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(.yellow)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 5)
-                            .background(Color(red: 0.30, green: 0.22, blue: 0.04))
-                            .clipShape(RoundedRectangle(cornerRadius: 5))
+                            .font(Theme.Fonts.number(12))
+                            .foregroundStyle(Color.black.opacity(0.8))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ChunkyButtonStyle(face: Theme.Palette.gold, lip: Theme.Palette.goldDeep,
+                                                   cornerRadius: 7, depth: 3))
+                    .frame(height: 28)
 
                     Button(action: onUnequip) {
                         Image(systemName: "xmark")
@@ -206,7 +210,7 @@ struct EquippedGearCard: View {
                             .foregroundStyle(Color.white.opacity(0.45))
                             .frame(width: 26)
                             .padding(.vertical, 5)
-                            .background(Color(white: 0.14))
+                            .background(Theme.Palette.stoneHi)
                             .clipShape(RoundedRectangle(cornerRadius: 5))
                     }
                     .buttonStyle(.plain)
@@ -214,11 +218,16 @@ struct EquippedGearCard: View {
             } else {
                 Spacer()
                 VStack(spacing: 8) {
-                    Image(systemName: slotSymbol)
-                        .font(.system(size: 26))
-                        .foregroundStyle(Color.white.opacity(0.12))
+                    // A ghosted silhouette of the game's own gear art for this slot.
+                    Image(slotArt)
+                        .resizable()
+                        .interpolation(.none)
+                        .scaledToFit()
+                        .frame(width: 34, height: 34)
+                        .grayscale(1)
+                        .opacity(0.18)
                     Text("EMPTY")
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .font(Theme.Fonts.label(9))
                         .foregroundStyle(Color.white.opacity(0.22))
                 }
                 .frame(maxWidth: .infinity)
@@ -228,24 +237,17 @@ struct EquippedGearCard: View {
         .padding(12)
         .frame(maxWidth: .infinity)
         .frame(minHeight: 170)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(white: 0.10))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(
-                            item.map { $0.rarity.uiColor.opacity(0.28) } ?? Color.white.opacity(0.07),
-                            lineWidth: 1
-                        )
-                )
-        )
+        .gamePanel(tint: item?.rarity.uiColor.opacity(0.7) ?? Theme.Palette.stoneEdge.opacity(0.5),
+                   cornerRadius: 12)
     }
 
-    private var slotSymbol: String {
+    /// Asset name of the starter gear art for each slot, used as the empty-slot ghost.
+    /// (The old SF Symbol "sword" doesn't exist, so the weapon slot showed nothing.)
+    private var slotArt: String {
         switch slot {
-        case .weapon: return "sword"
-        case .armor:  return "shield.fill"
-        case .ring:   return "seal.fill"
+        case .weapon: return "eq_sword"
+        case .armor:  return "eq_tunic"
+        case .ring:   return "eq_ring"
         }
     }
 }
@@ -266,10 +268,10 @@ struct UsableItemView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.name)
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .font(Theme.Fonts.label(13))
                     .foregroundStyle(.white)
                 Text(item.kind == .fullHeal ? "Restore HP to full" : "Auto-triggers on death")
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(Theme.Fonts.body(11))
                     .foregroundStyle(Color.white.opacity(0.55))
             }
 
@@ -278,7 +280,7 @@ struct UsableItemView: View {
             if item.kind == .fullHeal {
                 Button(action: onUse) {
                     Text("USE")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .font(Theme.Fonts.label(12))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 7)
@@ -288,7 +290,7 @@ struct UsableItemView: View {
                 .buttonStyle(.plain)
             } else {
                 Text("AUTO")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .font(Theme.Fonts.label(11))
                     .foregroundStyle(Color(red: 0.60, green: 0.45, blue: 0.95))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -297,12 +299,7 @@ struct UsableItemView: View {
             }
         }
         .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(white: 0.09))
-                .overlay(RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color(red: 0.55, green: 0.55, blue: 1.0).opacity(0.30), lineWidth: 1))
-        )
+        .gamePanel(tint: Color(red: 0.55, green: 0.55, blue: 1.0).opacity(0.75), cornerRadius: 10)
     }
 }
 
@@ -320,10 +317,10 @@ struct InventoryItemView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(item.name)
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .font(Theme.Fonts.label(13))
                         .foregroundStyle(.white)
                     Text(item.rarity.label)
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .font(Theme.Fonts.label(11))
                         .foregroundStyle(item.rarity.uiColor)
                         .padding(.horizontal, 4)
                         .padding(.vertical, 2)
@@ -331,10 +328,10 @@ struct InventoryItemView: View {
                         .clipShape(Capsule())
                 }
                 Text(item.statSummary)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(Theme.Fonts.body(11))
                     .foregroundStyle(Color.white.opacity(0.75))
                 Text("\(DungeonGame.stageLabel(floor: item.floorFound))  •  \(item.slot.label)")
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(Theme.Fonts.body(11))
                     .foregroundStyle(Color.white.opacity(0.50))
             }
 
@@ -343,7 +340,7 @@ struct InventoryItemView: View {
             VStack(spacing: 5) {
                 Button(action: onEquip) {
                     Text("EQUIP")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .font(Theme.Fonts.label(12))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(Color(red: 0.15, green: 0.38, blue: 0.72))
@@ -354,7 +351,7 @@ struct InventoryItemView: View {
 
                 Button(action: onSell) {
                     Text("SELL \(item.sellValue)g")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .font(Theme.Fonts.label(12))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(Color(red: 0.35, green: 0.25, blue: 0.05))
@@ -366,12 +363,7 @@ struct InventoryItemView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(white: 0.09))
-                .overlay(RoundedRectangle(cornerRadius: 10)
-                    .stroke(item.rarity.uiColor.opacity(0.18), lineWidth: 1))
-        )
+        .gamePanel(tint: item.rarity.uiColor.opacity(0.75), cornerRadius: 10)
     }
 }
 
@@ -390,10 +382,10 @@ struct SetBonusCardView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text("\(rarity.label) Set Bonus")
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .font(Theme.Fonts.label(13))
                         .foregroundStyle(.white)
                     Text("ACTIVE")
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .font(Theme.Fonts.label(9))
                         .foregroundStyle(rarity.uiColor)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
@@ -401,7 +393,7 @@ struct SetBonusCardView: View {
                         .clipShape(Capsule())
                 }
                 Text(summary)
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(Theme.Fonts.body(12))
                     .foregroundStyle(Color.white.opacity(0.75))
             }
             Spacer()

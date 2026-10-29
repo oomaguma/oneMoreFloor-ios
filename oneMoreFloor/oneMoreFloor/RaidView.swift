@@ -108,7 +108,7 @@ struct RaidView: View {
     private var raidHeaderBar: some View {
         HStack {
             Label("RAID", systemImage: "shield.lefthalf.filled")
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .font(Theme.Fonts.label(12))
                 .foregroundStyle(accentRaid)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
@@ -119,7 +119,7 @@ struct RaidView: View {
 
             if currentWave > 0 {
                 Text("WAVE  \(currentWave) / 3")
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                    .font(Theme.Fonts.label(12))
                     .foregroundStyle(Color.white.opacity(0.65))
             }
         }
@@ -130,11 +130,11 @@ struct RaidView: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text("HP")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(Theme.Fonts.label(10))
                     .foregroundStyle(Color.white.opacity(0.50))
                 Spacer()
                 Text("\(heroHp) / \(heroMaxHp)")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .font(Theme.Fonts.label(11))
                     .foregroundStyle(Color.white.opacity(0.75))
                     .monospacedDigit()
             }
@@ -170,12 +170,12 @@ struct RaidView: View {
             if blessingCount > 0 {
                 Label("\(blessingCount) blessing\(blessingCount == 1 ? "" : "s") at risk",
                       systemImage: "sparkles")
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(Theme.Fonts.body(10))
                     .foregroundStyle(Color(red: 0.95, green: 0.75, blue: 0.30).opacity(0.75))
             }
             if atRisk > 0 {
                 Label("\(atRisk)g at risk", systemImage: "dollarsign.circle")
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(Theme.Fonts.body(10))
                     .foregroundStyle(Color(red: 1.0, green: 0.55, blue: 0.25).opacity(0.75))
             }
             Spacer()
@@ -194,7 +194,7 @@ struct RaidView: View {
                     .font(.system(size: 60))
 
                 Text(success ? "RAID COMPLETE" : "RAID FAILED")
-                    .font(.system(size: 22, weight: .bold, design: .monospaced))
+                    .font(Theme.Fonts.display(22))
                     .foregroundStyle(
                         success
                         ? Color(red: 0.95, green: 0.82, blue: 0.10)
@@ -213,7 +213,7 @@ struct RaidView: View {
                             .multilineTextAlignment(.center)
                     }
                 }
-                .font(.system(size: 14, design: .monospaced))
+                .font(Theme.Fonts.body(14))
 
                 // Continue — dismisses the raid and returns to the dungeon.
                 Button {
@@ -221,7 +221,7 @@ struct RaidView: View {
                     // isRaidActive → false collapses RaidView from GameView's ZStack
                 } label: {
                     Text("CONTINUE")
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
+                        .font(Theme.Fonts.label(14))
                         .foregroundStyle(
                             success ? Color(red: 0.95, green: 0.82, blue: 0.10) : .white
                         )
@@ -231,7 +231,7 @@ struct RaidView: View {
                             RoundedRectangle(cornerRadius: 10)
                                 .fill(success
                                     ? Color(red: 0.55, green: 0.42, blue: 0.08).opacity(0.30)
-                                    : Color(white: 0.15))
+                                    : Theme.Palette.stoneHi)
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 10)
                                         .strokeBorder(

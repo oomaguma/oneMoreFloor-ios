@@ -658,12 +658,12 @@ struct ActiveEffectsBarView: View {
                             }
                             if game.activeEffects.count > 5 {
                                 Text("+\(game.activeEffects.count - 5)")
-                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                    .font(Theme.Fonts.label(10))
                                     .foregroundStyle(Color.white.opacity(0.40))
                             }
                         }
                         Text("\(game.activeEffects.count) EFFECTS")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .font(Theme.Fonts.label(10))
                             .foregroundStyle(Color.white.opacity(0.40))
                         Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                             .font(.system(size: 9, weight: .semibold))
@@ -700,7 +700,7 @@ struct ActiveEffectsBarView: View {
                 EffectDetailView(effect: effect)
                     .presentationDetents([.height(260)])
                     .presentationDragIndicator(.visible)
-                    .presentationBackground(Color(red: 0.07, green: 0.07, blue: 0.11))
+                    .presentationBackground(Theme.Palette.abyss)
             }
         }
     }
@@ -710,7 +710,7 @@ struct ActiveEffectsBarView: View {
             Text(effect.icon)
                 .font(.system(size: 13))
             Text(effect.name)
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .font(Theme.Fonts.label(11))
                 .foregroundStyle(effect.isBlessing ? Color(red: 0.4, green: 0.95, blue: 0.55)
                                                    : Color(red: 1.0, green: 0.5, blue: 0.5))
         }
@@ -745,10 +745,10 @@ struct ConsumablesBarView: View {
                             Text(vial.icon)
                                 .font(.system(size: 13))
                             Text(vial.name)
-                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                .font(Theme.Fonts.label(11))
                                 .foregroundStyle(.white)
                             Text("USE")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .font(Theme.Fonts.label(11))
                                 .foregroundStyle(Color(red: 0.4, green: 0.95, blue: 0.55))
                         }
                         .padding(.horizontal, 12)
@@ -784,10 +784,10 @@ struct EffectDetailView: View {
                 Text(effect.icon)
                     .font(.system(size: 44))
                 Text(effect.name)
-                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .font(Theme.Fonts.label(18))
                     .foregroundStyle(accentColor)
                 Text(effect.isBlessing ? "BLESSING" : "CURSE")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(Theme.Fonts.label(10))
                     .foregroundStyle(accentColor.opacity(0.7))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
@@ -830,33 +830,33 @@ struct EffectDetailView: View {
     private func effectRow(label: String, value: Int) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .font(Theme.Fonts.label(13))
                 .foregroundStyle(Color(white: 0.6))
             Spacer()
             Text(value > 0 ? "+\(value)" : "\(value)")
-                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .font(Theme.Fonts.label(13))
                 .foregroundStyle(value > 0 ? Color(red: 0.3, green: 0.85, blue: 0.45)
                                            : Color(red: 0.95, green: 0.35, blue: 0.35))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color(white: 0.1))
+        .background(Theme.Palette.stone)
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private func effectRowText(label: String, value: String) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .font(Theme.Fonts.label(13))
                 .foregroundStyle(Color(white: 0.6))
             Spacer()
             Text(value)
-                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .font(Theme.Fonts.label(13))
                 .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.45))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color(white: 0.1))
+        .background(Theme.Palette.stone)
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
@@ -877,7 +877,7 @@ struct FloorEventCardView: View {
                     .font(.system(size: 32))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(categoryLabel(t.category))
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(Theme.Fonts.label(11))
                         .foregroundStyle(categoryColor(t.category))
                         .padding(.horizontal, 7)
                         .padding(.vertical, 3)
@@ -886,14 +886,14 @@ struct FloorEventCardView: View {
                                 .fill(categoryColor(t.category).opacity(0.15))
                         )
                     Text(t.title)
-                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .font(Theme.Fonts.label(16))
                         .foregroundStyle(.white)
                 }
                 Spacer()
             }
 
             Text(t.flavorText)
-                .font(.system(size: 12, design: .monospaced).italic())
+                .font(Theme.Fonts.body(12).italic())
                 .foregroundStyle(Color.white.opacity(0.50))
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -917,14 +917,7 @@ struct FloorEventCardView: View {
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color(red: 0.10, green: 0.10, blue: 0.16))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .strokeBorder(categoryColor(t.category).opacity(0.6), lineWidth: 1.5)
-                )
-        )
+        .gamePanel(tint: categoryColor(t.category).opacity(0.75), cornerRadius: 14)
         .padding(.horizontal, 16)
         .padding(.top, 8)
     }
@@ -933,10 +926,10 @@ struct FloorEventCardView: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Text(label)
-                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .font(Theme.Fonts.label(12))
                     .foregroundStyle(active ? accent : Color.white.opacity(0.25))
                 Text(summary)
-                    .font(.system(size: 10, design: .monospaced))
+                    .font(Theme.Fonts.body(10))
                     .foregroundStyle(Color.white.opacity(0.45))
                     .multilineTextAlignment(.center)
             }

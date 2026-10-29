@@ -44,12 +44,29 @@ struct CharacterSelectView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.07, green: 0.07, blue: 0.11).ignoresSafeArea()
+            // Atmosphere: the entrance art, dimmed way down behind the grid.
+            Theme.Palette.abyss.ignoresSafeArea()
+            // Wrapped in an overlay on a Color so the fill-scaled image can't
+            // widen the ZStack (a scaledToFill image sizes its parent otherwise).
+            Color.clear
+                .overlay(
+                    Image("bg_entrance")
+                        .resizable()
+                        .interpolation(.none)
+                        .scaledToFill()
+                )
+                .clipped()
+                .ignoresSafeArea()
+                .opacity(0.25)
+            LinearGradient(colors: [Theme.Palette.abyss.opacity(0.3), Theme.Palette.abyss],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 Text(dynastyContext != nil ? "CHOOSE NEW CHAMPION" : "CHOOSE YOUR HERO")
-                    .font(.system(size: 18, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.white)
+                    .font(Theme.Fonts.display(26))
+                    .foregroundStyle(Theme.Palette.parchment)
+                    .gameShadow(3)
                     .padding(.top, 52)
                     .padding(.bottom, 12)
 
@@ -59,7 +76,7 @@ struct CharacterSelectView: View {
                             Image(systemName: "crown.fill")
                                 .font(.system(size: 11))
                             Text("Retiring \(ctx.retiringCharacterName): \(bonus.description)")
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .font(Theme.Fonts.label(12))
                         }
                         .foregroundStyle(Color(red: 1.00, green: 0.80, blue: 0.25))
                         .multilineTextAlignment(.center)
@@ -67,7 +84,7 @@ struct CharacterSelectView: View {
                         .padding(.bottom, 16)
                     } else {
                         Text("\(ctx.retiringCharacterName)'s legacy already claimed.")
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .font(Theme.Fonts.label(12))
                             .foregroundStyle(Color.white.opacity(0.45))
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 16)
@@ -75,14 +92,14 @@ struct CharacterSelectView: View {
                     }
                 } else if onCancel != nil && isDestructiveReset {
                     Text("Warning: starting a new hero resets all progress.")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .font(Theme.Fonts.label(12))
                         .foregroundStyle(Color(red: 1.00, green: 0.45, blue: 0.25))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
                 } else if onCancel != nil {
                     Text("Your soul shards and prestige upgrades carry over.")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .font(Theme.Fonts.label(12))
                         .foregroundStyle(Color.white.opacity(0.55))
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 16)
@@ -154,20 +171,29 @@ struct CharacterCardView: View {
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 8) {
-                SpriteView(scene: previewScene, options: [.allowsTransparency])
-                    .frame(height: 200)
-                    .frame(maxWidth: .infinity)
-                    .clipped()
+                // The hero on a glowing pedestal in its role color.
+                ZStack {
+                    RadialGradient(colors: [roleColor.opacity(0.35), .clear],
+                                   center: .center, startRadius: 4, endRadius: 80)
+                    Ellipse()
+                        .fill(Color.black.opacity(0.45))
+                        .frame(width: 90, height: 14)
+                        .offset(y: 26)
+                    SpriteView(scene: previewScene, options: [.allowsTransparency])
+                }
+                .frame(height: 150)
+                .frame(maxWidth: .infinity)
+                .clipped()
 
                 HStack(alignment: .firstTextBaseline) {
                     Text(character.name)
-                        .font(.system(size: 15, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.white)
+                        .font(Theme.Fonts.label(15))
+                        .foregroundStyle(Theme.Palette.parchment)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                     Spacer()
                     Text(character.role)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .font(Theme.Fonts.label(10))
                         .foregroundStyle(roleColor)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 3)
@@ -175,17 +201,18 @@ struct CharacterCardView: View {
                         .clipShape(Capsule())
                 }
 
+                // Fixed to three lines so every card in the grid is the same height.
                 Text(character.description)
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(Theme.Fonts.body(11))
                     .foregroundStyle(Color.white.opacity(0.60))
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(3, reservesSpace: true)
 
                 Divider().background(Color.white.opacity(0.10))
 
                 HStack(spacing: 0) {
-                    statPill("HP", "\(character.baseHP)", Color(red: 0.25, green: 0.85, blue: 0.40))
-                    statPill("ATK", "\(character.baseATK)", Color(red: 1.00, green: 0.55, blue: 0.20))
-                    statPill("DEF", "\(character.baseDEF)", Color(red: 0.35, green: 0.65, blue: 1.00))
+                    statPill("HP", "\(character.baseHP)", Theme.Palette.life)
+                    statPill("ATK", "\(character.baseATK)", Theme.Palette.flame)
+                    statPill("DEF", "\(character.baseDEF)", Theme.Palette.frost)
                     if character.baseRegen > 0 {
                         statPill("RGN", "\(character.baseRegen)", Color(red: 0.95, green: 0.82, blue: 0.30))
                     }
@@ -196,21 +223,14 @@ struct CharacterCardView: View {
                         Image(systemName: "crown.fill")
                             .font(.system(size: 9))
                         Text(bonus)
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .font(Theme.Fonts.label(10))
                     }
                     .foregroundStyle(Color(red: 1.00, green: 0.75, blue: 0.15))
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding(14)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(white: 0.10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(roleColor.opacity(0.25), lineWidth: 1)
-                    )
-            )
+            .gamePanel(tint: roleColor.opacity(0.55), cornerRadius: 16)
         }
         .buttonStyle(.plain)
     }
@@ -218,10 +238,10 @@ struct CharacterCardView: View {
     private func statPill(_ label: String, _ value: String, _ color: Color) -> some View {
         VStack(spacing: 2) {
             Text(label)
-                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                .font(Theme.Fonts.label(8))
                 .foregroundStyle(Color.white.opacity(0.50))
             Text(value)
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .font(Theme.Fonts.label(12))
                 .foregroundStyle(color)
         }
         .frame(maxWidth: .infinity)

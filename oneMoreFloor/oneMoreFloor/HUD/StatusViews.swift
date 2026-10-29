@@ -17,7 +17,7 @@ struct StatusBarView: View {
             statCell("SHARDS", "\(game.soulShards)")
         }
         .padding(.vertical, 10)
-        .background(Color(white: 0.11))
+        .background(Theme.Palette.stone)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.09), lineWidth: 1))
     }
@@ -26,10 +26,10 @@ struct StatusBarView: View {
     private func statCell(_ label: String, _ value: String, warning: Bool = false) -> some View {
         VStack(spacing: 3) {
             Text(label)
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .font(Theme.Fonts.label(12))
                 .foregroundStyle(Color.white.opacity(0.75))
             Text(value)
-                .font(.system(size: 16, weight: .medium, design: .monospaced))
+                .font(Theme.Fonts.label(16))
                 .foregroundStyle(warning ? .red : .white)
                 .monospacedDigit()
         }
@@ -52,11 +52,11 @@ struct CombatStatusView: View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 5) {
                 Text(game.character.name.uppercased())
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(Theme.Fonts.label(11))
                     .foregroundStyle(Color.white.opacity(0.80))
                 HealthBar(pct: heroPct, color: heroColor)
                 Text("\(game.heroHp) / \(game.heroMaxHp)")
-                    .font(.system(size: 13, design: .monospaced).weight(.medium))
+                    .font(Theme.Fonts.label(13))
                     .foregroundStyle(Color.white.opacity(0.80))
                     .monospacedDigit()
             }
@@ -64,13 +64,13 @@ struct CombatStatusView: View {
 
             VStack(alignment: .trailing, spacing: 5) {
                 Text(game.displayMonsterName.isEmpty ? "NO ENEMY" : game.displayMonsterName.uppercased())
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(Theme.Fonts.label(11))
                     .foregroundStyle(game.displayIsBoss
                         ? Color(red: 1.0, green: 0.55, blue: 0.10)
                         : Color.white.opacity(0.80))
                 if let status = game.bossStatusText {
                     Text(status)
-                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .font(Theme.Fonts.label(9))
                         .foregroundStyle(status == "SHIELDED"
                             ? Color(red: 0.45, green: 0.80, blue: 1.0)
                             : Color(red: 1.0, green: 0.40, blue: 0.32))
@@ -82,7 +82,7 @@ struct CombatStatusView: View {
                 Text(game.displayMonsterMaxHp > 0
                      ? "\(game.displayMonsterHp) / \(game.displayMonsterMaxHp)"
                      : "—")
-                    .font(.system(size: 13, design: .monospaced).weight(.medium))
+                    .font(Theme.Fonts.label(13))
                     .foregroundStyle(Color.white.opacity(0.80))
                     .monospacedDigit()
             }
@@ -117,7 +117,7 @@ struct HealthBar: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(Color(white: 0.16))
+                    .fill(Theme.Palette.stoneHi)
                     .frame(height: 10)
                 RoundedRectangle(cornerRadius: 4)
                     .fill(color)

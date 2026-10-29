@@ -1,6 +1,6 @@
 # oneMoreFloor — The Overhaul
 
-**Status:** Phases 1 & 2 complete & compiling clean (2026-06-22), under active playtest/tuning. Phase 3 (UI overhaul) in progress on `feature/glow-up` (2026-10-29): design system + battle screen + title/upgrades/rest-site restyled; onboarding, remaining screens, and ASO still to do. Phase 4 (monetization) not started; some Phase 4 rewarded-ad placements landed early.
+**Status:** Phases 1 & 2 complete & compiling clean (2026-06-22), under active playtest/tuning. Phase 3 (UI overhaul) in progress on `feature/glow-up` (2026-10-29): design system, battle screen, and every main screen/overlay restyled; Settings/Store/Raid hand-polish, onboarding, retention loops, and ASO still to do. Phase 4 (monetization) not started; some Phase 4 rewarded-ad placements landed early.
 **Goal:** Turn a passive idle game into the push-your-luck climber its title promises.
 
 This is the living design + build spec for the overhaul. It is the source of truth — keep it current as we build. When a mechanic changes in code, change it here too.
@@ -130,7 +130,14 @@ The smallest change that fixes the dead first session. Ship it, watch D1/D7 move
 - [x] Tab bar → stone/gold theme with glowing selected icon.
 - [x] Upgrades → icon tiles per stat, level badges, gold chunky buy buttons.
 - [x] Rest site card → pot as the headline number, chunky DESCEND / REST / RAID.
-- [ ] Character select, Items, Prestige, Quests, floor-event card, game-over / boss-victory / offline overlays, Settings, Store.
+- [x] Game over → "YOU FELL / on floor N", pot as headline, chunky Second Wind / Restart.
+- [x] **Token migration (pass 2):** every monospaced system font in the app → `Theme.Fonts`; cold blue-grey fills → stone palette (incl. Settings, Store, Raid).
+- [x] Character select → atmospheric backdrop, role-colored pedestal glow per hero, equal-height cards.
+- [x] Overlays (offline summary, boss victory, zone unlock, item/blessing banners) → `.gamePanel`, chunky buttons, palette tokens.
+- [x] Items → gear row pinned to natural height (was ballooning to ~340pt), ghosted gear-art empty slots (the weapon slot's SF Symbol "sword" doesn't exist, so it showed nothing), chunky sell/optimize.
+- [x] Quests → display header, themed gold/green progress bars. Prestige → chunky PRESTIGE / RETIRE.
+- [ ] Hand-polish still pending: Settings, Store, Raid, floor-event card, map (token-migrated only).
+- [ ] **Design flags:** PRESTIGE fires with no confirmation even though it resets the run (Retire has one). The daily quest list shows up to 12 quests, incl. "Reach floor 100" as a daily — 3 achievable dailies is the healthier norm.
 - [ ] Pixel display font (OFL) — swap `Theme.Fonts.display` to `.custom(...)`; needs the font file added to the bundle.
 - [ ] Merge Upgrades + Items into one "Hero" tab; hide Prestige until it unlocks.
 

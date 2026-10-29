@@ -20,11 +20,11 @@ struct OfflineSummaryView: View {
 
             VStack(spacing: 16) {
                 Text("WHILE YOU WERE AWAY")
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .font(Theme.Fonts.label(13))
                     .foregroundStyle(Color.white.opacity(0.75))
 
                 Text(summary.durationString)
-                    .font(.system(size: 32, weight: .bold, design: .monospaced))
+                    .font(Theme.Fonts.display(32))
                     .foregroundStyle(.white)
 
                 VStack(spacing: 12) {
@@ -46,7 +46,7 @@ struct OfflineSummaryView: View {
 
                 if summary.stoppedByDeath {
                     Text("Unlock Undying Will to keep earning gold after death")
-                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                        .font(Theme.Fonts.body(11))
                         .foregroundStyle(Color.white.opacity(0.4))
                         .multilineTextAlignment(.center)
                 }
@@ -54,8 +54,8 @@ struct OfflineSummaryView: View {
                 if summary.goldEarned > 0 {
                     if didDoubleGold {
                         Text("2× GOLD APPLIED!")
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                            .foregroundStyle(Color.yellow.opacity(0.85))
+                            .font(Theme.Fonts.label(13))
+                            .foregroundStyle(Theme.Palette.gold)
                     } else {
                         Button {
                             adManager.showOfflineAd {
@@ -75,37 +75,29 @@ struct OfflineSummaryView: View {
                                 }
                                 Text(adManager.isOfflineAdReady ? "WATCH AD — 2× GOLD" : "LOADING AD...")
                             }
-                            .font(.system(size: 14, weight: .semibold, design: .monospaced))
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 10)
-                            .background(adManager.isOfflineAdReady
-                                ? Color(red: 0.55, green: 0.42, blue: 0.08)
-                                : Color(white: 0.18))
-                            .clipShape(RoundedRectangle(cornerRadius: 10))
-                            .foregroundStyle(adManager.isOfflineAdReady ? .white : Color.white.opacity(0.35))
+                            .font(Theme.Fonts.label(15))
+                            .foregroundStyle(adManager.isOfflineAdReady ? Color.black.opacity(0.8) : Theme.Palette.ash)
                         }
+                        .buttonStyle(ChunkyButtonStyle(face: adManager.isOfflineAdReady ? Theme.Palette.gold : Theme.Palette.stoneHi,
+                                                       lip: adManager.isOfflineAdReady ? Theme.Palette.goldDeep : .black,
+                                                       cornerRadius: 12, depth: 4))
+                        .frame(height: 52)
                         .disabled(!adManager.isOfflineAdReady)
                     }
                 }
 
                 Button(action: onDismiss) {
                     Text("CONTINUE")
-                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
-                        .padding(.horizontal, 40)
-                        .padding(.vertical, 12)
-                        .background(Color(red: 0.15, green: 0.38, blue: 0.72))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
-                        .foregroundStyle(.white)
+                        .font(Theme.Fonts.display(18))
+                        .foregroundStyle(Theme.Palette.parchment)
+                        .gameShadow()
                 }
+                .buttonStyle(ChunkyButtonStyle(face: Theme.Palette.stoneHi, lip: .black, cornerRadius: 12, depth: 4))
+                .frame(height: 52)
                 .padding(.top, 4)
             }
             .padding(28)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color(red: 0.09, green: 0.09, blue: 0.14))
-                    .overlay(RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1))
-            )
+            .gamePanel(tint: Theme.Palette.stoneEdge.opacity(0.75), cornerRadius: 16)
             .padding(.horizontal, 32)
             .onAppear {
                 let autoDoubled = StoreManager.shared.hasPurchasedRemoveAds && summary.goldEarned > 0 && !didDoubleGold
@@ -127,11 +119,11 @@ struct OfflineSummaryView: View {
     private func summaryRow(_ label: String, _ value: String, _ color: Color) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: 14, design: .monospaced))
+                .font(Theme.Fonts.body(14))
                 .foregroundStyle(Color.white.opacity(0.75))
             Spacer()
             Text(value)
-                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                .font(Theme.Fonts.label(14))
                 .foregroundStyle(color)
         }
     }
@@ -256,15 +248,16 @@ struct BossVictoryOverlay: View {
             VStack(spacing: 0) {
                 Image(systemName: "trophy.fill")
                     .font(.system(size: 44))
-                    .foregroundStyle(Color(red: 1.0, green: 0.80, blue: 0.15))
+                    .foregroundStyle(Theme.Palette.gold)
                     .padding(.bottom, 14)
 
                 Text("ZONE CLEARED!")
-                    .font(.system(size: 22, weight: .bold, design: .monospaced))
-                    .foregroundStyle(Color(red: 1.0, green: 0.82, blue: 0.20))
+                    .font(Theme.Fonts.display(30))
+                    .foregroundStyle(Theme.Palette.gold)
+                    .gameShadow(3)
 
                 Text("Stage \(victory.stageLabel)")
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(Theme.Fonts.body(12))
                     .foregroundStyle(Color.white.opacity(0.50))
                     .padding(.top, 4)
                     .padding(.bottom, 18)
@@ -274,11 +267,11 @@ struct BossVictoryOverlay: View {
                     .padding(.bottom, 16)
 
                 Text(victory.zoneIcon + "  " + victory.zoneName.uppercased())
-                    .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                    .font(Theme.Fonts.label(15))
                     .foregroundStyle(.white)
 
                 Text("\(victory.bossName) Defeated")
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(Theme.Fonts.body(12))
                     .foregroundStyle(Color.white.opacity(0.55))
                     .padding(.top, 4)
                     .padding(.bottom, 20)
@@ -290,37 +283,31 @@ struct BossVictoryOverlay: View {
                 HStack(spacing: 36) {
                     VStack(spacing: 4) {
                         Text("GOLD")
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .font(Theme.Fonts.label(9))
                             .foregroundStyle(Color.white.opacity(0.50))
                         Text("+\(victory.goldEarned)g")
-                            .font(.system(size: 22, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.yellow)
+                            .font(Theme.Fonts.display(22))
+                            .foregroundStyle(Theme.Palette.gold)
+                            .gameShadow()
                     }
 
                     VStack(spacing: 4) {
                         Text("REWARD")
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .font(Theme.Fonts.label(9))
                             .foregroundStyle(Color.white.opacity(0.50))
                         HStack(spacing: 4) {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 13))
                             Text("Item Drop!")
-                                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                .font(Theme.Fonts.label(14))
                         }
                         .foregroundStyle(Color(red: 0.72, green: 0.45, blue: 1.00))
                     }
                 }
             }
             .padding(28)
-            .background(
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(Color(red: 0.09, green: 0.09, blue: 0.14))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18)
-                            .stroke(Color(red: 1.0, green: 0.82, blue: 0.20).opacity(0.35), lineWidth: 1.5)
-                    )
-                    .shadow(color: Color(red: 1.0, green: 0.75, blue: 0.10).opacity(0.15), radius: 24)
-            )
+            .gamePanel(tint: Theme.Palette.gold.opacity(0.75), cornerRadius: 18)
+            .shadow(color: Theme.Palette.flame.opacity(0.15), radius: 24)
             .padding(.horizontal, 28)
         }
         .onTapGesture { onDismiss() }
@@ -348,25 +335,20 @@ struct BlessingBanner: View {
                 .font(.system(size: 26))
             VStack(alignment: .leading, spacing: 3) {
                 Text("BLESSING")
-                    .font(.system(size: 10, weight: .bold, design: .monospaced))
+                    .font(Theme.Fonts.label(10))
                     .foregroundStyle(Color(red: 0.40, green: 0.95, blue: 0.55))
                 Text(template.title)
-                    .font(.system(size: 15, weight: .bold, design: .monospaced))
+                    .font(Theme.Fonts.label(15))
                     .foregroundStyle(.white)
                 Text(template.primaryEffectSummary)
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(Theme.Fonts.body(12))
                     .foregroundStyle(Color.white.opacity(0.75))
             }
             Spacer()
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 14)
-                .fill(Color(red: 0.08, green: 0.13, blue: 0.10))
-                .overlay(RoundedRectangle(cornerRadius: 14)
-                    .strokeBorder(Color(red: 0.30, green: 0.70, blue: 0.40).opacity(0.55), lineWidth: 1.5))
-        )
+        .gamePanel(tint: Theme.Palette.life.opacity(0.75), cornerRadius: 14)
         .padding(.horizontal, 16)
         .task {
             try? await Task.sleep(for: .seconds(3))
@@ -388,13 +370,13 @@ struct ItemDropBanner: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("ITEM FOUND!")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .font(Theme.Fonts.label(10))
                         .foregroundStyle(item.rarity.uiColor)
                     Text(item.name)
-                        .font(.system(size: 15, weight: .bold, design: .monospaced))
+                        .font(Theme.Fonts.label(15))
                         .foregroundStyle(.white)
                     Text(item.statSummary)
-                        .font(.system(size: 12, design: .monospaced))
+                        .font(Theme.Fonts.body(12))
                         .foregroundStyle(Color.white.opacity(0.75))
                 }
 
@@ -407,13 +389,8 @@ struct ItemDropBanner: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color(red: 0.09, green: 0.09, blue: 0.14))
-                    .overlay(RoundedRectangle(cornerRadius: 14)
-                        .stroke(item.rarity.uiColor.opacity(0.45), lineWidth: 1.5))
-                    .shadow(color: item.rarity.uiColor.opacity(0.20), radius: 12)
-            )
+            .gamePanel(tint: item.rarity.uiColor.opacity(0.75), cornerRadius: 14)
+            .shadow(color: item.rarity.uiColor.opacity(0.20), radius: 12)
             .padding(.horizontal, 16)
         }
         .buttonStyle(.plain)
@@ -436,7 +413,7 @@ struct ZoneUnlockOverlay: View {
 
             VStack(spacing: 0) {
                 Text("NEW ZONE UNLOCKED")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .font(Theme.Fonts.label(11))
                     .foregroundStyle(Color(red: 0.35, green: 0.85, blue: 0.45))
                     .padding(.bottom, 14)
 
@@ -445,25 +422,18 @@ struct ZoneUnlockOverlay: View {
                     .padding(.bottom, 10)
 
                 Text(zone.name.uppercased())
-                    .font(.system(size: 22, weight: .bold, design: .monospaced))
+                    .font(Theme.Fonts.display(22))
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
 
                 Text("Floor \(zone.minFloor)\(zone.maxFloor.map { "–\($0)" } ?? "+")")
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(Theme.Fonts.body(12))
                     .foregroundStyle(Color.white.opacity(0.50))
                     .padding(.top, 6)
             }
             .padding(36)
-            .background(
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(Color(red: 0.07, green: 0.13, blue: 0.10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18)
-                            .stroke(Color(red: 0.30, green: 0.72, blue: 0.42).opacity(0.45), lineWidth: 1.5)
-                    )
-                    .shadow(color: Color(red: 0.25, green: 0.80, blue: 0.40).opacity(0.18), radius: 24)
-            )
+            .gamePanel(tint: Theme.Palette.life.opacity(0.75), cornerRadius: 18)
+            .shadow(color: Theme.Palette.life.opacity(0.18), radius: 24)
             .padding(.horizontal, 36)
         }
         .onTapGesture { onDismiss() }

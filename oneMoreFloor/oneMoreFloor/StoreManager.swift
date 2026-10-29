@@ -130,7 +130,7 @@ struct StoreSheetView: View {
                         }
                     } label: {
                         Text(isRestoring ? "Restoring..." : "Restore Purchases")
-                            .font(.system(size: 13, design: .monospaced))
+                            .font(Theme.Fonts.body(13))
                             .foregroundStyle(Color.white.opacity(0.45))
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 14)
@@ -140,16 +140,16 @@ struct StoreSheetView: View {
                 .padding(16)
                 .padding(.top, 8)
             }
-            .background(Color(red: 0.07, green: 0.07, blue: 0.11).ignoresSafeArea())
+            .background(Theme.Palette.abyss.ignoresSafeArea())
             .navigationTitle("Support the Game")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color(red: 0.09, green: 0.09, blue: 0.14), for: .navigationBar)
+            .toolbarBackground(Theme.Palette.stone, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
-                        .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                        .font(Theme.Fonts.label(14))
                         .foregroundStyle(.white)
                 }
             }
@@ -168,10 +168,10 @@ struct StoreSheetView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                    .font(Theme.Fonts.label(15))
                     .foregroundStyle(.white)
                 Text(detail)
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(Theme.Fonts.body(12))
                     .foregroundStyle(Color.white.opacity(0.60))
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -198,7 +198,7 @@ struct StoreSheetView: View {
                             .frame(width: 60)
                     } else {
                         Text(product.displayPrice)
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .font(Theme.Fonts.label(13))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 8)
@@ -211,7 +211,7 @@ struct StoreSheetView: View {
                 .padding(.top, 2)
             } else {
                 Text("—")
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(Theme.Fonts.body(13))
                     .foregroundStyle(Color.white.opacity(0.30))
                     .frame(width: 40)
                     .padding(.top, 2)
@@ -220,7 +220,7 @@ struct StoreSheetView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 12)
-                .fill(Color(white: 0.10))
+                .fill(Theme.Palette.stone)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(isPurchased ? iconColor.opacity(0.35) : Color.white.opacity(0.08), lineWidth: 1)

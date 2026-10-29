@@ -74,7 +74,7 @@ struct PrestigeTabView: View {
                 PrestigeRowView(game: game, onRetireHero: { showDynastySelect = true })
 
                 Text("PERMANENT UPGRADES")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .font(Theme.Fonts.label(10))
                     .foregroundStyle(Color.white.opacity(0.75))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 4)
@@ -99,19 +99,12 @@ struct PrestigeTabView: View {
                         Image(systemName: "person.2.fill")
                             .font(.system(size: 14))
                         Text("CHANGE HERO")
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .font(Theme.Fonts.label(13))
                     }
                     .foregroundStyle(Color.white.opacity(0.70))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color(white: 0.08))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
-                            )
-                    )
+                    .gamePanel(tint: Theme.Palette.stoneEdge.opacity(0.75), cornerRadius: 10)
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 8)
@@ -121,19 +114,12 @@ struct PrestigeTabView: View {
                         Image(systemName: "cart.fill")
                             .font(.system(size: 14))
                         Text("SUPPORT THE GAME")
-                            .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                            .font(Theme.Fonts.label(13))
                     }
                     .foregroundStyle(Color(red: 1.00, green: 0.75, blue: 0.25).opacity(0.85))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color(white: 0.08))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color(red: 1.00, green: 0.75, blue: 0.25).opacity(0.22), lineWidth: 1)
-                            )
-                    )
+                    .gamePanel(tint: Color(red: 1.00, green: 0.75, blue: 0.25).opacity(0.75), cornerRadius: 10)
                 }
                 .buttonStyle(.plain)
             }
@@ -141,7 +127,7 @@ struct PrestigeTabView: View {
             .padding(.top, 14)
             .padding(.bottom, 32)
         }
-        .background(Color(red: 0.07, green: 0.07, blue: 0.11))
+        .background(Theme.Palette.abyss)
         .sheet(isPresented: $showStore) {
             StoreSheetView()
                 .presentationDetents([.large])
@@ -177,7 +163,7 @@ struct LegacyBonusSectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("LEGACY BONUSES")
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .font(Theme.Fonts.label(10))
                 .foregroundStyle(Color.white.opacity(0.75))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
@@ -198,12 +184,12 @@ struct LegacyBonusSectionView: View {
                                         .font(.system(size: 10))
                                         .foregroundStyle(Color(red: 1.00, green: 0.75, blue: 0.15))
                                     Text(char.name)
-                                        .font(.system(size: 13, design: .monospaced))
+                                        .font(Theme.Fonts.body(13))
                                         .foregroundStyle(.white)
                                 }
                                 Spacer()
                                 Text(char.legacyBonus.description)
-                                    .font(.system(size: 12, design: .monospaced))
+                                    .font(Theme.Fonts.body(12))
                                     .foregroundStyle(Color(red: 1.00, green: 0.75, blue: 0.15))
                             }
                             .padding(.horizontal, 16)
@@ -212,14 +198,7 @@ struct LegacyBonusSectionView: View {
                     }
                 }
             }
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(white: 0.10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(Color(red: 1.00, green: 0.75, blue: 0.15).opacity(0.22), lineWidth: 1)
-                    )
-            )
+            .gamePanel(tint: Color(red: 1.00, green: 0.75, blue: 0.15).opacity(0.75), cornerRadius: 10)
         }
     }
 }
@@ -323,10 +302,10 @@ struct PrestigeUpgradeRowView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(upgrade.name)
-                            .font(.system(size: 16, design: .monospaced))
+                            .font(Theme.Fonts.body(16))
                             .foregroundStyle(Color.white.opacity(upgrade.isMaxed ? 0.4 : 1.0))
                         Text("Lv \(upgrade.level)/\(upgrade.maxLevel)")
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(Theme.Fonts.body(11))
                             .foregroundStyle(Color.white.opacity(0.75))
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
@@ -334,17 +313,17 @@ struct PrestigeUpgradeRowView: View {
                             .clipShape(Capsule())
                     }
                     Text(upgrade.level == 0 ? upgrade.detail : upgrade.currentEffect)
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(Theme.Fonts.body(13))
                         .foregroundStyle(Color.white.opacity(0.75))
                 }
                 Spacer()
                 if upgrade.isMaxed {
                     Text("MAX")
-                        .font(.system(size: 13, design: .monospaced).weight(.semibold))
+                        .font(Theme.Fonts.label(13))
                         .foregroundStyle(Color(red: 0.70, green: 0.50, blue: 1.00))
                 } else {
                     Text("\(upgrade.shardCost) ◈")
-                        .font(.system(size: 18, design: .monospaced).weight(.semibold))
+                        .font(Theme.Fonts.label(18))
                         .foregroundStyle(canAfford ? Color(red: 0.70, green: 0.50, blue: 1.00) : Color.white.opacity(0.35))
                 }
             }
@@ -352,7 +331,7 @@ struct PrestigeUpgradeRowView: View {
             .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(white: 0.10))
+                    .fill(Theme.Palette.stone)
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
                             .stroke(
@@ -383,55 +362,50 @@ struct PrestigeRowView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Prestige")
-                        .font(.system(size: 16, design: .monospaced))
-                        .foregroundStyle(game.canPrestige() ? Color(red: 0.72, green: 0.52, blue: 1.00) : .white)
+                    Text("PRESTIGE")
+                        .font(Theme.Fonts.display(22))
+                        .foregroundStyle(game.canPrestige() ? Color(red: 0.72, green: 0.52, blue: 1.00) : Theme.Palette.parchment)
+                        .gameShadow()
                     Text(subtitle)
-                        .font(.system(size: 13, design: .monospaced))
+                        .font(Theme.Fonts.body(13))
                         .foregroundStyle(Color.white.opacity(0.75))
                 }
                 Spacer()
             }
 
             if game.canPrestige() {
-                Button {
-                    game.prestige()
-                } label: {
-                    Text("+\(game.prestigeShardValue()) ◈")
-                        .font(.system(size: 14, design: .monospaced).weight(.semibold))
-                }
-                .buttonStyle(.bordered)
-                .tint(Color(red: 0.55, green: 0.35, blue: 0.85))
-
-                Button {
-                    showRetireConfirm = true
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "crown.fill")
-                            .font(.system(size: 11))
-                        Text("Retire Hero")
-                            .font(.system(size: 13, design: .monospaced).weight(.semibold))
+                HStack(spacing: 10) {
+                    // Prestige: reset the run, cash the climb in for soul shards.
+                    Button {
+                        game.prestige()
+                    } label: {
+                        Text("PRESTIGE  +\(game.prestigeShardValue()) ◈")
+                            .font(Theme.Fonts.display(15))
+                            .foregroundStyle(.white)
+                            .gameShadow()
                     }
+                    .buttonStyle(ChunkyButtonStyle(face: Color(red: 0.50, green: 0.30, blue: 0.85),
+                                                   lip: Color(red: 0.22, green: 0.12, blue: 0.40),
+                                                   cornerRadius: 12, depth: 4))
+
+                    Button {
+                        showRetireConfirm = true
+                    } label: {
+                        Label("RETIRE", systemImage: "crown.fill")
+                            .font(Theme.Fonts.label(13))
+                            .foregroundStyle(Theme.Palette.gold)
+                    }
+                    .buttonStyle(ChunkyButtonStyle(face: Theme.Palette.stoneHi, lip: .black,
+                                                   cornerRadius: 12, depth: 4))
+                    .frame(width: 112)
                 }
-                .buttonStyle(.bordered)
-                .tint(Color(red: 0.85, green: 0.62, blue: 0.15))
+                .frame(height: 50)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(white: 0.10))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(
-                            game.canPrestige()
-                                ? Color(red: 0.50, green: 0.30, blue: 0.80).opacity(0.45)
-                                : Color.white.opacity(0.07),
-                            lineWidth: 1
-                        )
-                )
-        )
+        .gamePanel(tint: game.canPrestige() ? Color(red: 0.55, green: 0.35, blue: 0.90) : Theme.Palette.stoneEdge,
+                   cornerRadius: 16)
         .alert("Retire \(game.character.name)?", isPresented: $showRetireConfirm) {
             Button("Retire", role: .destructive) { onRetireHero() }
             Button("Cancel", role: .cancel) { }

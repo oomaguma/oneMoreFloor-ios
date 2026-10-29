@@ -10,8 +10,8 @@ struct SettingsView: View {
     @AppStorage("com.oneMoreFloor.notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("com.oneMoreFloor.autoEquipEnabled")     private var autoEquipEnabled     = true
 
-    private let bgColor   = Color(red: 0.07, green: 0.07, blue: 0.11)
-    private let cardColor = Color(red: 0.10, green: 0.10, blue: 0.16)
+    private let bgColor   = Theme.Palette.abyss
+    private let cardColor = Theme.Palette.stone
     private let gold      = Color(red: 0.90, green: 0.70, blue: 0.28)
 
     @State private var gcManager = GameCenterManager.shared
@@ -66,11 +66,11 @@ struct SettingsView: View {
                                 .frame(width: 26)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Leaderboards & Achievements")
-                                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                                    .font(Theme.Fonts.label(14))
                                     .foregroundStyle(gcManager.isAuthenticated ? .white : Color.white.opacity(0.35))
                                 if !gcManager.isAuthenticated {
                                     Text("Sign in to Game Center to enable")
-                                        .font(.system(size: 11, design: .monospaced))
+                                        .font(Theme.Fonts.body(11))
                                         .foregroundStyle(Color.white.opacity(0.30))
                                 }
                             }
@@ -113,10 +113,10 @@ struct SettingsView: View {
                         Spacer()
                         VStack(spacing: 3) {
                             Text("One More Floor")
-                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .font(Theme.Fonts.label(12))
                                 .foregroundStyle(Color.white.opacity(0.30))
                             Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")")
-                                .font(.system(size: 11, design: .monospaced))
+                                .font(Theme.Fonts.body(11))
                                 .foregroundStyle(Color.white.opacity(0.20))
                         }
                         Spacer()
@@ -131,7 +131,7 @@ struct SettingsView: View {
             .background(bgColor.ignoresSafeArea())
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color(red: 0.09, green: 0.09, blue: 0.14), for: .navigationBar)
+            .toolbarBackground(Theme.Palette.stone, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .preferredColorScheme(.dark)
         }
@@ -141,7 +141,7 @@ struct SettingsView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 11, weight: .bold, design: .monospaced))
+            .font(Theme.Fonts.label(11))
             .foregroundStyle(gold.opacity(0.80))
             .padding(.bottom, -8)
     }
@@ -160,7 +160,7 @@ struct SettingsView: View {
                 .foregroundStyle(iconColor)
                 .frame(width: 26)
             Text(title)
-                .font(.system(size: 14, weight: .medium, design: .monospaced))
+                .font(Theme.Fonts.label(14))
                 .foregroundStyle(.white)
             Spacer()
             Toggle("", isOn: isOn)
@@ -179,7 +179,7 @@ struct SettingsView: View {
                     .foregroundStyle(iconColor)
                     .frame(width: 26)
                 Text(title)
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
+                    .font(Theme.Fonts.label(14))
                     .foregroundStyle(.white)
                 Spacer()
                 Image(systemName: "arrow.up.right")
@@ -195,11 +195,11 @@ struct SettingsView: View {
     private func creditRow(label: String, value: String) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .font(Theme.Fonts.label(13))
                 .foregroundStyle(Color.white.opacity(0.50))
             Spacer()
             Text(value)
-                .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                .font(Theme.Fonts.label(13))
                 .foregroundStyle(.white)
         }
         .padding(.horizontal, 16)
@@ -209,10 +209,10 @@ struct SettingsView: View {
     private func adCreditRow() -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text("Advertising")
-                .font(.system(size: 13, weight: .medium, design: .monospaced))
+                .font(Theme.Fonts.label(13))
                 .foregroundStyle(Color.white.opacity(0.50))
             Text("Google AdMob + UMP. Ads respect your ATT preference.")
-                .font(.system(size: 11, design: .monospaced))
+                .font(Theme.Fonts.body(11))
                 .foregroundStyle(Color.white.opacity(0.30))
                 .fixedSize(horizontal: false, vertical: true)
         }

@@ -17,13 +17,13 @@ struct IntroCardView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 0.07, green: 0.07, blue: 0.11).ignoresSafeArea()
+            Theme.Palette.abyss.ignoresSafeArea()
 
             VStack(spacing: 22) {
                 Spacer()
                 Text("⚔️").font(.system(size: 52))
                 Text("HOW TO SURVIVE")
-                    .font(.system(size: 22, weight: .bold, design: .monospaced))
+                    .font(Theme.Fonts.display(22))
                     .foregroundStyle(gold)
 
                 VStack(alignment: .leading, spacing: 18) {
@@ -43,7 +43,7 @@ struct IntroCardView: View {
 
                 Button(action: onBegin) {
                     Text("DESCEND")
-                        .font(.system(size: 17, weight: .bold, design: .monospaced))
+                        .font(Theme.Fonts.label(17))
                         .foregroundStyle(.black)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 15)
@@ -64,10 +64,10 @@ struct IntroCardView: View {
                 .frame(width: 32)
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    .font(Theme.Fonts.label(14))
                     .foregroundStyle(.white)
                 Text(body)
-                    .font(.system(size: 13, design: .monospaced))
+                    .font(Theme.Fonts.body(13))
                     .foregroundStyle(Color.white.opacity(0.65))
                     .fixedSize(horizontal: false, vertical: true)
             }
