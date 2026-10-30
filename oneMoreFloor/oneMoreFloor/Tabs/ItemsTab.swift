@@ -50,13 +50,10 @@ struct ItemsTabView: View {
         VStack(spacing: 0) {
             // Fixed equipped section
             VStack(spacing: 14) {
+                // (No page title: the Hero tab's UPGRADES / GEAR picker names it.)
                 HStack {
-                    Text("GEAR")
-                        .font(Theme.Fonts.display(22))
-                        .foregroundStyle(Theme.Palette.parchment)
-                        .gameShadow()
-                    Spacer()
                     codexButton
+                    Spacer()
                     if !game.inventory.isEmpty {
                         Button(action: { game.optimizeEquipment() }) {
                             HStack(spacing: 5) {

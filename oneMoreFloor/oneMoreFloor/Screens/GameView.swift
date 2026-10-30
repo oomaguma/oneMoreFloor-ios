@@ -431,10 +431,8 @@ struct GameView: View {
     @ViewBuilder
     private var sheetContent: some View {
         switch selectedTab {
-        case .upgrades:
-            UpgradesTabView(game: game)
-        case .items:
-            ItemsTabView(game: game)
+        case .hero:
+            HeroTabView(game: game)
         case .prestige:
             PrestigeTabView(game: game, combatScene: combatScene, onChangeCharacter: { onChangeCharacter(game) })
         case .quests:

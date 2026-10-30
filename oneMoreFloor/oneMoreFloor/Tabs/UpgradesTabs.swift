@@ -13,11 +13,8 @@ struct UpgradesTabView: View {
             VStack(spacing: 10) {
                 // Spendable (banked) gold — the sheet covers the top status bar,
                 // so surface it here so the player can manage purchases.
+                // (No page title: the Hero tab's UPGRADES / GEAR picker names it.)
                 HStack(spacing: 8) {
-                    Text("UPGRADES")
-                        .font(Theme.Fonts.display(22))
-                        .foregroundStyle(Theme.Palette.parchment)
-                        .gameShadow()
                     Spacer()
                     HStack(spacing: 5) {
                         Image(systemName: "circle.fill")

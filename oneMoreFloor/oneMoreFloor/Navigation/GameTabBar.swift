@@ -5,7 +5,9 @@ import SwiftUI
 
 // MARK: - Tab Navigation
 
-enum GameTab { case battle, upgrades, prestige, items, quests }
+/// Upgrades and Items used to be separate tabs; they're one Hero tab now
+/// (see Tabs/HeroTab.swift).
+enum GameTab { case hero, battle, prestige, quests }
 
 struct CustomGameTabBar: View {
     @Binding var selectedTab: GameTab
@@ -18,8 +20,7 @@ struct CustomGameTabBar: View {
     }
 
     private let tabs: [TabDef] = [
-        .init(tab: .upgrades, label: "UPGRADES", icon: "arrow.up.circle.fill"),
-        .init(tab: .items,    label: "ITEMS",    icon: "bag.fill"),
+        .init(tab: .hero,     label: "HERO",     icon: "figure.fencing"),
         .init(tab: .battle,   label: "BATTLE",   icon: "shield.fill"),
         .init(tab: .prestige, label: "PRESTIGE", icon: "sparkles"),
         .init(tab: .quests,   label: "QUESTS",   icon: "scroll.fill"),
