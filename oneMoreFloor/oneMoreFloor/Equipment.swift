@@ -176,6 +176,14 @@ enum EquipmentDrop {
         return .common
     }
 
+    #if DEBUG
+    /// QA only (-debugDrop): a random item of an exact rarity.
+    static func debugItem(rarity: ItemRarity, floor: Int) -> Equipment {
+        let slot = EquipmentSlot.allCases.randomElement()!
+        return EquipmentTemplate.pool(for: slot).randomElement()!.generate(rarity: rarity, floor: floor)
+    }
+    #endif
+
     // Boss fights always drop an item, minimum Uncommon rarity
     static func rollBoss(floor: Int, luck: Double = 1.0) -> Equipment? {
         let rarity   = rollBossRarity(floor: floor, luck: luck)

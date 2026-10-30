@@ -123,6 +123,17 @@ enum BossGimmick: String {
     case enrage    // hits harder once its HP drops low
     case shield    // periodically blunts the hero's strikes
     case lifesteal // periodically regenerates HP
+
+    /// A one-line hint for the next-boss preview — enough to plan around,
+    /// without spoiling who's waiting at the bottom of the zone.
+    var teaser: String {
+        switch self {
+        case .none:      return "Something big waits below"
+        case .enrage:    return "Grows furious when wounded"
+        case .shield:    return "Shields itself from blows"
+        case .lifesteal: return "Drinks life to heal"
+        }
+    }
 }
 
 @Observable
@@ -410,6 +421,21 @@ class DungeonGame {
     }
 
     static func isBoss(floor: Int) -> Bool { floor % 10 == 0 }
+
+    // MARK: - Next-boss preview
+    // Every zone ends in a boss on its 10th floor. Showing it coming — a
+    // silhouette and a countdown — turns "just another floor" into a build-up.
+
+    /// The boss floor at the end of the current zone (10, 20, 30…).
+    var nextBossFloor: Int { ((currentFloor - 1) / 10 + 1) * 10 }
+
+    /// Floors left before the boss. 0 means you're on the boss floor now.
+    var floorsUntilBoss: Int { nextBossFloor - currentFloor }
+
+    /// Who's waiting on that floor, and their signature trick. The boss floor
+    /// is always inside the current zone, so the current zone's boss it is.
+    var nextBossEnemy: EnemyType? { DungeonGame.zoneBossEnemies[currentZone.id] }
+    var nextBossGimmick: BossGimmick { DungeonGame.bossGimmick(forZone: currentZone.id) }
 
     // MARK: - Computed properties
 
@@ -1556,7 +1582,8 @@ class DungeonGame {
         }
     }
 
-    private func receiveDrop(_ item: Equipment) {
+    /// Not private only so DEBUG launch shortcuts can hand out drops.
+    func receiveDrop(_ item: Equipment) {
         let autoSellLevel = prestigeUpgrades.first(where: { $0.id == "autosell" })?.level ?? 0
         if autoSellLevel > 0,
            let itemIdx      = ItemRarity.allCases.firstIndex(of: item.rarity),

@@ -263,6 +263,9 @@ struct BattleHeaderView: View {
                     .foregroundStyle(Theme.Palette.dust)
                     .gameShadow(1)
                 bestMarker
+                // What's waiting at the bottom of this zone.
+                NextBossPreview(game: game)
+                    .padding(.top, 4)
             }
 
             Spacer()

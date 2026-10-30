@@ -419,47 +419,151 @@ struct BlessingBanner: View {
     }
 }
 
-// MARK: - Item Drop Banner
+// MARK: - Loot Reveal Banner
 
+/// Every drop gets a little "reveal" moment instead of a plain notice: the icon
+/// pops out of a burst of its rarity color, a shine sweeps across the card, and
+/// the rarer the item, the bigger the show (Epic and Legendary get spinning
+/// rays and stay up longer). It's still a banner, never a blocking popup —
+/// drops are frequent in an idle game, so the fight keeps going underneath.
 struct ItemDropBanner: View {
     let item: Equipment
+    /// True when the drop went straight onto the hero (an empty slot, or an
+    /// auto-equip upgrade). False means it went to the bag.
+    let wasEquipped: Bool
     let onDismiss: () -> Void
+
+    /// Drives the reveal: false = the first frame (icon tiny, no shine),
+    /// true = revealed. Flipped in `.task`, so SwiftUI animates between them.
+    @State private var revealed = false
+    @State private var shinePhase: CGFloat = -1
+    @State private var raysSpin = false
+
+    // MARK: Rarity drama
+    // One place that decides how loud each rarity is.
+
+    /// Epic and Legendary are "big moments": rays, a bigger icon, longer on screen.
+    private var isBigMoment: Bool { item.rarity == .epic || item.rarity == .legendary }
+    private var color: Color { item.rarity.uiColor }
+    private var iconSize: CGFloat { isBigMoment ? 54 : 46 }
+    private var secondsOnScreen: Double { isBigMoment ? 6 : 4 }
+
+    /// The headline over the item name. Common gear doesn't need shouting.
+    private var headline: String {
+        switch item.rarity {
+        case .common:    return "ITEM FOUND"
+        case .uncommon:  return "UNCOMMON DROP"
+        case .rare:      return "RARE DROP!"
+        case .epic:      return "EPIC DROP!"
+        case .legendary: return "LEGENDARY!!"
+        }
+    }
 
     var body: some View {
         Button(action: onDismiss) {
             HStack(spacing: 12) {
-                ItemIconView(item: item, size: 46)
+                revealIcon
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("ITEM FOUND!")
-                        .font(Theme.Fonts.label(10))
-                        .foregroundStyle(item.rarity.uiColor)
+                    Text(headline)
+                        .font(Theme.Fonts.label(isBigMoment ? 12 : 10))
+                        .tracking(1)
+                        .foregroundStyle(color)
+                        .gameShadow(1)
                     Text(item.name)
                         .font(Theme.Fonts.label(15))
                         .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     Text(item.statSummary)
                         .font(Theme.Fonts.body(12))
                         .foregroundStyle(Color.white.opacity(0.75))
                 }
+                // The text slides in a beat after the icon pops.
+                .opacity(revealed ? 1 : 0)
+                .offset(x: revealed ? 0 : -8)
 
-                Spacer()
+                Spacer(minLength: 4)
 
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.white.opacity(0.40))
-                    .padding(.trailing, 4)
+                destinationTag
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .gamePanel(tint: item.rarity.uiColor.opacity(0.75), cornerRadius: 14)
-            .shadow(color: item.rarity.uiColor.opacity(0.20), radius: 12)
+            .gamePanel(tint: color.opacity(0.75), cornerRadius: 14)
+            .overlay(shine)
+            .shadow(color: color.opacity(isBigMoment ? 0.45 : 0.20), radius: isBigMoment ? 18 : 12)
             .padding(.horizontal, 16)
         }
         .buttonStyle(.plain)
         .task {
-            try? await Task.sleep(for: .seconds(4))
+            // Beat 1: pop the icon and text in.
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.55)) { revealed = true }
+            // Beat 2: the shine sweeps across once the card has landed.
+            try? await Task.sleep(for: .milliseconds(180))
+            withAnimation(.easeInOut(duration: 0.7)) { shinePhase = 1 }
+            if isBigMoment {
+                withAnimation(.linear(duration: 6).repeatForever(autoreverses: false)) { raysSpin = true }
+            }
+            try? await Task.sleep(for: .seconds(secondsOnScreen))
             onDismiss()
         }
+    }
+
+    // MARK: Pieces
+
+    /// The item icon bursting out of a glow of its rarity color.
+    private var revealIcon: some View {
+        ZStack {
+            // Epic+: slow-spinning light rays behind the icon.
+            if isBigMoment {
+                ForEach(0..<8, id: \.self) { i in
+                    Capsule()
+                        .fill(color.opacity(0.55))
+                        .frame(width: 4, height: iconSize * 1.5)
+                        .rotationEffect(.degrees(Double(i) * 22.5))
+                }
+                .rotationEffect(.degrees(raysSpin ? 360 : 0))
+                .blur(radius: 1.5)
+            }
+            // The burst: a soft glow that blooms out as the icon arrives.
+            Circle()
+                .fill(RadialGradient(colors: [color.opacity(0.7), .clear],
+                                     center: .center, startRadius: 2, endRadius: iconSize * 0.8))
+                .frame(width: iconSize * 1.6, height: iconSize * 1.6)
+                .scaleEffect(revealed ? 1 : 0.2)
+                .opacity(item.rarity == .common ? 0.35 : 1)
+
+            ItemIconView(item: item, size: iconSize)
+                .scaleEffect(revealed ? 1 : 0.3)
+                .rotationEffect(.degrees(revealed ? 0 : -25))
+        }
+        .frame(width: iconSize, height: iconSize)
+    }
+
+    /// Where the drop went: worn right now, or waiting in the bag.
+    private var destinationTag: some View {
+        VStack(spacing: 2) {
+            Image(systemName: wasEquipped ? "checkmark.shield.fill" : "bag.fill")
+                .font(.system(size: 15, weight: .bold))
+            Text(wasEquipped ? "EQUIPPED" : "TO BAG")
+                .font(Theme.Fonts.label(9))
+        }
+        .foregroundStyle(wasEquipped ? Theme.Palette.life : Theme.Palette.dust)
+        .opacity(revealed ? 1 : 0)
+    }
+
+    /// A diagonal band of light that sweeps across the card once.
+    private var shine: some View {
+        GeometryReader { geo in
+            LinearGradient(colors: [.clear, .white.opacity(isBigMoment ? 0.35 : 0.18), .clear],
+                           startPoint: .leading, endPoint: .trailing)
+                .frame(width: geo.size.width * 0.35)
+                .rotationEffect(.degrees(20))
+                .offset(x: shinePhase * geo.size.width * 1.2)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .padding(.horizontal, 16)
+        .allowsHitTesting(false)
     }
 }
 

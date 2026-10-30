@@ -20,6 +20,8 @@
 //   -debugBlessings YES   Also grant War Surge, Thorn Mantle, and Blood Rush.
 //   -debugEvent <name>    Show a floor event card now (a FloorEventTemplate case,
 //                         e.g. lifeVessel, cursedSigil, bloodRush, strangeAltar).
+//   -debugDrop <rarity>   Drop an item of that rarity now (common, uncommon,
+//                         rare, epic, legendary) to see the loot reveal.
 //   -debugOfflineDeath YES  Show a "while you were away" summary with one death,
 //                         to check the notification soft ask without waiting.
 
@@ -46,6 +48,12 @@ extension DungeonGame {
            let template = FloorEventTemplate(rawValue: raw) {
             pendingFloorEvent = FloorEvent(template: template)
             log("🛠 DEBUG: summoned floor event \(raw)")
+        }
+
+        // -debugDrop <rarity>: hand out one item of that rarity (loot reveal).
+        if let raw = args.string(forKey: "debugDrop"),
+           let rarity = ItemRarity(rawValue: raw) {
+            receiveDrop(EquipmentDrop.debugItem(rarity: rarity, floor: currentFloor))
         }
 
         let raidFloor = args.integer(forKey: "debugRaid")

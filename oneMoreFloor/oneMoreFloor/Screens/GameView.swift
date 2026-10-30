@@ -84,7 +84,9 @@ struct GameView: View {
             // Item drop banner — non-blocking top banner; hidden when a full-screen overlay is up
             if let drop = game.pendingDrop, !isAnyFullScreenOverlayActive {
                 VStack {
-                    ItemDropBanner(item: drop, onDismiss: { game.dismissDrop() })
+                    ItemDropBanner(item: drop,
+                                   wasEquipped: game.equippedItems[drop.slot.rawValue]?.id == drop.id,
+                                   onDismiss: { game.dismissDrop() })
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
@@ -264,9 +266,15 @@ struct GameView: View {
             if hasUnlock { Haptics.notify(.success) }
         }
         .onChange(of: game.pendingDrop?.id) { _, newID in
-            if newID != nil {
-                SoundManager.shared.play("item_equip")
-                Haptics.impact(.medium)
+            // The buzz scales with rarity, so a Legendary *feels* different
+            // in the hand before you've even read the banner.
+            guard newID != nil, let rarity = game.pendingDrop?.rarity else { return }
+            SoundManager.shared.play("item_equip")
+            switch rarity {
+            case .common:          Haptics.impact(.light)
+            case .uncommon:        Haptics.impact(.medium)
+            case .rare:            Haptics.impact(.heavy)
+            case .epic, .legendary: Haptics.notify(.success)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in
