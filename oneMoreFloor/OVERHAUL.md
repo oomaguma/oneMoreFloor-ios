@@ -192,6 +192,16 @@ Raid glow-up (2026-10-29):
 - [ ] Next-boss silhouette preview; rare surprise events (mimic, golden goblin, merchant).
 - [ ] Later: daily seeded dungeon with a Game Center board.
 
+**3e½. Analytics for the new features — ✅ done (2026-10-30, `AnalyticsManager.swift`)**
+So the glow-up can be judged by numbers, not vibes. Every new PostHog event and what it answers:
+- [x] `tutorial_step` (`step`: greed / atRisk / campAhead / firstCamp) plus the existing `character_selected` → `tutorial_completed` make up the **FTUE funnel**, showing which beat loses new players. The first step (strike) is where every run starts, so `character_selected` stands in for it.
+- [x] `rest_site_choice` (`choice`: rest / descend / raid, with `floor`, `greed`, `pot` logged *before* the choice resets them) answers **is the gamble tempting?** If nearly everyone rests, descending isn't worth it.
+- [x] `raid_briefing_opened` → `raid_started` / `raid_briefing_backed_out` (with `danger`) shows **whether the danger rating scares players off**.
+- [x] `raid_ended` (`outcome`: cleared / escaped / lost, `escaped_after_wave`, `shards`, `blessings`) answers **are raids winnable, and is escaping too attractive?** A raid abandoned by quitting the app logs as `lost`.
+- [x] `notification_ask_shown` → `notification_ask_answered` (`granted`) shows **whether the soft ask converts**.
+- [x] `fall_share_tapped` (`source`: game_over / hall) counts **interest in the death card**. ShareLink can't report a completed share, so this counts taps that open the sheet, not sends.
+- No personal data: only game numbers and button choices. The hero name is never sent.
+
 **3f. ASO**
 - [ ] New screenshots that show the greed tension (the new battle screen is the hero shot), keyword/title pass. (Partly outside the code.)
 

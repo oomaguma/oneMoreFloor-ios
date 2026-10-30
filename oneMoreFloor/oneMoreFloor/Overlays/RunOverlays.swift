@@ -271,7 +271,7 @@ struct GameOverOverlay: View {
 
                     // Share the tombstone — the run becomes a story worth telling.
                     if let fall = game.currentFall {
-                        FallenShareButton(fall: fall) {
+                        FallenShareButton(fall: fall, source: "game_over") {
                             Label("SHARE YOUR FALL", systemImage: "square.and.arrow.up")
                                 .font(Theme.Fonts.label(14))
                                 .foregroundStyle(Theme.Palette.parchment)

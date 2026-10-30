@@ -7,7 +7,11 @@ final class NotificationManager {
     private init() {}
 
     func requestPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        // The only caller is the NOTIFY ME soft ask, so the answer to iOS's
+        // dialog tells us whether the soft ask actually converts.
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            Analytics.notificationAskAnswered(granted: granted)
+        }
     }
 
     /// True while iOS has never asked for notification permission. iOS shows its

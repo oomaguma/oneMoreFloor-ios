@@ -93,8 +93,10 @@ struct FallenCardImage: Transferable {
 }
 
 /// Shares the memorial card as an image through the system share sheet.
+/// `source` says where the button lives ("game_over" or "hall") for analytics.
 struct FallenShareButton<Label: View>: View {
     let fall: FallenHero
+    let source: String
     @ViewBuilder let label: () -> Label
 
     var body: some View {
@@ -102,6 +104,11 @@ struct FallenShareButton<Label: View>: View {
                   preview: SharePreview("\(fall.heroName) fell on floor \(fall.floor)")) {
             label()
         }
+        // ShareLink has no "did share" callback, so count the tap that opens
+        // the sheet. simultaneousGesture lets the ShareLink still get its tap.
+        .simultaneousGesture(TapGesture().onEnded {
+            Analytics.fallShareTapped(source: source, floor: fall.floor)
+        })
     }
 }
 
@@ -143,7 +150,7 @@ struct HallOfTheFallenSection: View {
         .sheet(item: $selected) { fall in
             VStack(spacing: 18) {
                 FallenCardView(fall: fall)
-                FallenShareButton(fall: fall) {
+                FallenShareButton(fall: fall, source: "hall") {
                     Label("SHARE", systemImage: "square.and.arrow.up")
                         .font(Theme.Fonts.display(17))
                         .foregroundStyle(Color.black.opacity(0.8))

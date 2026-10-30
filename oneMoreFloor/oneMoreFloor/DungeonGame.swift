@@ -721,6 +721,8 @@ class DungeonGame {
             raidOutcome = RaidOutcome(kind: .cleared, shards: earned, loot: loot,
                                       blessingsLost: 0, goldLost: 0)
             log("🏆 RAID COMPLETE — +\(earned) Soul Shard\(earned == 1 ? "" : "s")!")
+            Analytics.raidEnded(outcome: "cleared", wave: 0, floor: currentFloor, shards: earned,
+                                blessings: activeEffects.filter { $0.isBlessing }.count)
         } else {
             let blessingCount = activeEffects.filter { $0.isBlessing }.count
             let goldLost      = atRiskGold
@@ -730,6 +732,8 @@ class DungeonGame {
             heroHp = max(1, heroMaxHp / 3)
             raidOutcome = RaidOutcome(kind: .lost, shards: 0, loot: nil,
                                       blessingsLost: blessingCount, goldLost: goldLost)
+            Analytics.raidEnded(outcome: "lost", wave: 0, floor: currentFloor, shards: 0,
+                                blessings: blessingCount)
             log("💀 RAID FAILED — \(blessingCount) blessing\(blessingCount == 1 ? "" : "s") lost, \(goldLost)g forfeit.")
         }
     }
@@ -744,6 +748,8 @@ class DungeonGame {
         soulShards += earned
         raidOutcome = RaidOutcome(kind: .escaped(afterWave: wavesCleared), shards: earned, loot: nil,
                                   blessingsLost: 0, goldLost: 0)
+        Analytics.raidEnded(outcome: "escaped", wave: wavesCleared, floor: currentFloor, shards: earned,
+                            blessings: activeEffects.filter { $0.isBlessing }.count)
         log("🏃 Escaped the raid after wave \(wavesCleared) — +\(earned) Soul Shard\(earned == 1 ? "" : "s").")
     }
 

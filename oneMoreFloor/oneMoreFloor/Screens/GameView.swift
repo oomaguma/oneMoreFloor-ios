@@ -304,7 +304,17 @@ struct GameView: View {
         .onChange(of: offlineSummary?.deaths ?? 0) { _, deaths in
             // Hero died while away → check whether iOS can still be asked.
             guard deaths > 0 else { offerNotificationAsk = false; return }
-            Task { offerNotificationAsk = await NotificationManager.shared.canAskForPermission() }
+            Task {
+                offerNotificationAsk = await NotificationManager.shared.canAskForPermission()
+                if offerNotificationAsk { Analytics.notificationAskShown() }
+            }
+        }
+        .onChange(of: tutorialStepRaw) { _, raw in
+            // Tutorial funnel: log each hint step as it's reached. "done" is
+            // skipped — finishTutorial() already sends tutorial_completed, and
+            // returning players jump straight to done without seeing any step.
+            guard let step = TutorialStep(rawValue: raw), step != .done else { return }
+            Analytics.tutorialStepReached(String(describing: step))
         }
         .onChange(of: game.pendingRestSite) { _, isUp in
             // The first camp was just resolved (Rest, Descend, or Raid): the

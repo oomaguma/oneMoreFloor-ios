@@ -28,8 +28,18 @@ struct RestSiteCardView: View {
     var body: some View {
         if showRaidBriefing {
             RaidBriefingView(game: game,
-                             onBegin: { game.launchRaid() },
-                             onBack: { withAnimation(.spring(response: 0.35)) { showRaidBriefing = false } })
+                             onBegin: {
+                                 trackChoice("raid")
+                                 Analytics.raidStarted(floor: game.currentFloor,
+                                                       danger: game.raidDanger.rawValue,
+                                                       blessings: game.activeEffects.filter { $0.isBlessing }.count)
+                                 game.launchRaid()
+                             },
+                             onBack: {
+                                 Analytics.raidBriefingBackedOut(floor: game.currentFloor,
+                                                                 danger: game.raidDanger.rawValue)
+                                 withAnimation(.spring(response: 0.35)) { showRaidBriefing = false }
+                             })
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
         } else {
             restSiteCard
@@ -126,12 +136,12 @@ struct RestSiteCardView: View {
                 choiceButton(label: "DESCEND",
                              icon: "arrow.down.to.line",
                              summary: "Greed climbs",
-                             accent: accentDescend) { game.descendPastRestSite() }
+                             accent: accentDescend) { trackChoice("descend"); game.descendPastRestSite() }
 
                 choiceButton(label: "REST",
                              icon: "tent.fill",
                              summary: "Bank \(game.atRiskGold) · heal",
-                             accent: accentRest) { game.rest() }
+                             accent: accentRest) { trackChoice("rest"); game.rest() }
             }
             .frame(height: 76)
 
@@ -143,6 +153,7 @@ struct RestSiteCardView: View {
                          icon: "flag.2.crossed.fill",
                          summary: "Win +\(game.raidShardReward) ◈ · see the briefing",
                          accent: accentRaid) {
+                Analytics.raidBriefingOpened(floor: game.currentFloor, danger: game.raidDanger.rawValue)
                 withAnimation(.spring(response: 0.35)) { showRaidBriefing = true }
             }
                 .frame(height: 64)
@@ -152,6 +163,15 @@ struct RestSiteCardView: View {
         .gamePanel(tint: accentCamp.opacity(0.7), cornerRadius: 20)
         .padding(.horizontal, 16)
         .padding(.top, 8)
+    }
+
+    // MARK: - Analytics
+
+    /// Log the camp decision before the model acts on it — rest() resets
+    /// greed and banks the pot, so reading them afterwards would report zeros.
+    private func trackChoice(_ choice: String) {
+        Analytics.restSiteChoice(choice, floor: game.currentFloor,
+                                 greed: game.greedMultiplier, pot: game.atRiskGold)
     }
 
     private func rsStat(_ label: String, _ value: String, _ color: Color) -> some View {
