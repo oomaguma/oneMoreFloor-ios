@@ -256,6 +256,9 @@ class DungeonGame {
     // MARK: - Hall of the Fallen
     /// Every run that ended in death, newest first (see Legacy/HallOfTheFallen.swift).
     private(set) var fallenHeroes: [FallenHero] = HallOfTheFallen.load()
+    /// The bestiary + gear codex. Survives New Hero; saved alongside the run
+    /// in `save()` (not on every kill — the offline sim can rack up hundreds).
+    private(set) var codex: Codex = Codex.load()
     /// The enemy that killed the hero in the foreground; nil after an offline death.
     private var lastSlayer: String?
 
@@ -854,6 +857,7 @@ class DungeonGame {
         if monsterHp <= 0 {
             let killedOnFloor = currentFloor
             let isBossKill    = DungeonGame.isBoss(floor: killedOnFloor)
+            recordKillInCodex(isBoss: isBossKill)
             let earned = goldReward(floor: killedOnFloor, isBoss: isBossKill)
             atRiskGold += earned   // earnings join the at-risk pot, not banked gold
             inCombat        = false
@@ -1560,6 +1564,13 @@ class DungeonGame {
     }
 
     func dismissDrop() { pendingDrop = nil }
+
+    /// Logs the monster on screen in the bestiary. Bosses also count toward
+    /// their zone's boss entry.
+    private func recordKillInCodex(isBoss: Bool) {
+        guard let enemy = currentEnemyType else { return }
+        codex.recordKill(enemyID: enemy.id, bossOfZone: isBoss ? currentZone.id : nil)
+    }
     func dismissBlessing() { pendingBlessing = nil }
     func dismissBossVictory() { pendingBossVictory = nil }
 
@@ -1584,6 +1595,7 @@ class DungeonGame {
 
     /// Not private only so DEBUG launch shortcuts can hand out drops.
     func receiveDrop(_ item: Equipment) {
+        codex.recordGear(item)   // found counts, even if it's auto-sold below
         let autoSellLevel = prestigeUpgrades.first(where: { $0.id == "autosell" })?.level ?? 0
         if autoSellLevel > 0,
            let itemIdx      = ItemRarity.allCases.firstIndex(of: item.rarity),
@@ -1852,6 +1864,7 @@ class DungeonGame {
     }
 
     func save() {
+        codex.save()
         let data = SaveData(
             characterID: characterID,
             heroHp: heroHp, heroMaxHp: heroMaxHp, heroAtk: heroAtk,
@@ -1959,6 +1972,10 @@ class DungeonGame {
         displayMonsterName  = inCombat ? monsterName : ""
         currentFightFloor   = inCombat ? currentFloor : 0
 
+        // Gear already owned counts as found, so players who had gear before
+        // the codex existed don't start with an empty collection.
+        for item in Array(equippedItems.values) + inventory { codex.recordGear(item) }
+
         return data.savedAt
     }
 
@@ -2008,6 +2025,7 @@ class DungeonGame {
             } else if inCombat {
                 monsterHp -= max(1, heroAtk)
                 if monsterHp <= 0 {
+                    recordKillInCodex(isBoss: DungeonGame.isBoss(floor: currentFloor))
                     let earned = goldReward(floor: currentFloor, isBoss: DungeonGame.isBoss(floor: currentFloor))
                     gold += earned; goldEarned += earned
                     inCombat = false; ticksUntilFight = 2

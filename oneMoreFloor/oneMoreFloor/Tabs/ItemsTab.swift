@@ -43,6 +43,8 @@ struct ItemIconView: View {
 
 struct ItemsTabView: View {
     let game: DungeonGame
+    /// The bestiary + gear codex opens as its own sheet from the header.
+    @State private var showCodex = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,6 +56,7 @@ struct ItemsTabView: View {
                         .foregroundStyle(Theme.Palette.parchment)
                         .gameShadow()
                     Spacer()
+                    codexButton
                     if !game.inventory.isEmpty {
                         Button(action: { game.optimizeEquipment() }) {
                             HStack(spacing: 5) {
@@ -408,5 +411,34 @@ struct SetBonusCardView: View {
                         .stroke(rarity.uiColor.opacity(0.35), lineWidth: 1)
                 )
         )
+    }
+}
+
+// MARK: - Codex Button
+
+extension ItemsTabView {
+    /// Opens the codex. Shows overall discovery so a growing number is
+    /// visible every time you open your gear.
+    var codexButton: some View {
+        let found = game.codex.bestiaryProgress.found + game.codex.gearProgress.found
+        let total = game.codex.bestiaryProgress.total + game.codex.gearProgress.total
+        return Button { showCodex = true } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "book.closed.fill")
+                    .font(.system(size: 11))
+                Text("CODEX \(found)/\(total)")
+                    .font(Theme.Fonts.label(11))
+            }
+            .foregroundStyle(Theme.Palette.parchment)
+            .padding(.horizontal, 12)
+        }
+        .buttonStyle(ChunkyButtonStyle(face: Theme.Palette.stoneHi, lip: .black, cornerRadius: 10, depth: 3))
+        .fixedSize()
+        .frame(height: 34)
+        .sheet(isPresented: $showCodex) {
+            CodexView(codex: game.codex)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+        }
     }
 }

@@ -74,6 +74,13 @@ struct Equipment: Identifiable, Codable, Equatable {
 
     var sellValue: Int { max(1, floorFound * Int(rarity.statMultiplier)) }
 
+    /// The name without its rarity prefix: "Ancient Dark Armor" → "Dark Armor".
+    /// It's what the gear codex groups by.
+    var baseName: String {
+        let prefix = rarity.namePrefix + " "
+        return name.hasPrefix(prefix) ? String(name.dropFirst(prefix.count)) : name
+    }
+
     var statSummary: String {
         var parts: [String] = []
         if atkBonus > 0   { parts.append("+\(atkBonus) ATK") }
@@ -144,6 +151,13 @@ private struct EquipmentTemplate {
 
 enum EquipmentDrop {
     static let inventoryLimit = 15
+
+    /// Every gear piece that can drop, in slot order — the gear codex's rows.
+    static var codexEntries: [(baseName: String, slot: EquipmentSlot, iconName: String)] {
+        EquipmentSlot.allCases.flatMap { slot in
+            EquipmentTemplate.pool(for: slot).map { ($0.baseName, $0.slot, $0.iconName) }
+        }
+    }
 
     static func roll(floor: Int, luck: Double = 1.0) -> Equipment? {
         let dropChance = 0.15 + Double(floor) * 0.001
