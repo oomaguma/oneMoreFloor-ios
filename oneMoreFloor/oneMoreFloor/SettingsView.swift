@@ -82,6 +82,10 @@ struct SettingsView: View {
                     rowDivider()
                     creditRow(label: "Sound Effects", value: "Chequered Ink")
                     rowDivider()
+                    // SIL Open Font License; the license text ships in the bundle
+                    // (Theme/Fonts/PixelifySans-OFL.txt).
+                    creditRow(label: "Pixel Font", value: "Pixelify Sans (OFL)")
+                    rowDivider()
                     adCreditRow()
                 }
                 .gamePanel(cornerRadius: 14)

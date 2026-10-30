@@ -66,21 +66,31 @@ enum Theme {
     // MARK: - Type
     //
     // Two voices instead of one monospaced drone:
-    //   • display — chunky, heavy, rounded. Floor numbers, multipliers, button
-    //     labels. Paired with `.gameShadow()` it echoes the title logo's
-    //     hard drop shadow.
-    //   • body — friendly rounded text for descriptions and labels.
+    //   • display + number — Pixelify Sans, a pixel font that matches the
+    //     sprite art. Headings, floor numbers, multipliers, button labels.
+    //     Paired with `.gameShadow()` it echoes the title logo's hard shadow.
+    //   • label + body — friendly rounded system text for everything you
+    //     actually *read* (descriptions, stats), where a pixel font gets tiring.
     //
-    // TODO(Josh): drop a pixel font (e.g. an OFL-licensed one) into the bundle
-    // and point `display` at it with `.custom("FontName", size:)`. That one
-    // line restyles every heading in the game.
+    // The font ships in Theme/Fonts/ (SIL Open Font License, copy alongside)
+    // and is registered under UIAppFonts in Info.plist. It's a variable font,
+    // so `.weight()` picks Regular…Bold. If it ever fails to load, SwiftUI
+    // quietly falls back to the system font — nothing breaks.
+
+    static let pixelFontFamily = "Pixelify Sans"
+    /// Pixelify Sans looks smaller than the heavy rounded font it replaced at
+    /// the same point size, so sizes are nudged up to keep every existing
+    /// layout looking the same weight. One knob instead of editing 200 call sites.
+    static let pixelFontScale: CGFloat = 1.12
 
     enum Fonts {
         static func display(_ size: CGFloat) -> Font {
-            .system(size: size, weight: .black, design: .rounded)
+            .custom(Theme.pixelFontFamily, size: size * Theme.pixelFontScale).weight(.bold)
         }
         static func number(_ size: CGFloat) -> Font {
-            .system(size: size, weight: .heavy, design: .rounded).monospacedDigit()
+            // Pixel digits are already fixed-width, so numbers don't jitter
+            // as they count up (what .monospacedDigit() did for the old font).
+            .custom(Theme.pixelFontFamily, size: size * Theme.pixelFontScale).weight(.bold)
         }
         static func label(_ size: CGFloat) -> Font {
             .system(size: size, weight: .bold, design: .rounded)

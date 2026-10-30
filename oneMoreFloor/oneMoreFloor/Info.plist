@@ -4,6 +4,10 @@
 <dict>
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-2071020921604740~9252718806</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>PixelifySans.ttf</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -28,8 +32,6 @@
 		<key>UIColorName</key>
 		<string>Black</string>
 	</dict>
-	<!-- Opt out of iPad multitasking (split view / slide over).
-	     Required when the app only supports portrait orientation. -->
 	<key>UIRequiresFullScreen</key>
 	<true/>
 </dict>
