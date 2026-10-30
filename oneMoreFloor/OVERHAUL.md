@@ -233,6 +233,23 @@ The game had 16 sounds. The hero's swing (every ~0.9 s) alternated between 2 fil
 - [x] **Per-floor gold sound:** it was the 1.3 s `coin_collect` jingle on every kill, which Josh flagged as really annoying. It's now `gold_tick`, a 0.2 s Coin Zap tink with 6 takes, quiet (−16 dB) and pitch-varied. `coin_collect` is kept for quest claims.
 - [ ] Still silent: blessings and curses, and can't-afford taps.
 
+**3e⅞. Performance pass — ✅ done (2026-10-30)**
+Measured on a Release build in the simulator with macOS `sample` and `footprint`. The Mac was heavily loaded, so the absolute numbers run high; the before/after comparison is what counts. Confirm on a real phone with Instruments.
+- **Baseline:**
+  - Memory: 35 MB on the title screen, about 125 MB in battle, flat over time (no leak).
+  - Battle while idle: the main thread is about 93% free. The background CPU is mostly the Google Mobile Ads SDK preloading video ads.
+  - Auto combat: the main thread was about 48% busy.
+- [x] **Sound playback moved off the main thread.** `AVAudioPlayer.play()` and seeks wait on the system audio service. That cost about 1.2 s of main-thread time per 15 s of combat, made worse by the sound pass adding more sounds per hit. `SoundManager` now does all loading and playback on its own serial queue. It also only rewinds a player that's still playing.
+- [x] **No more first-hit hitch.** Building about 90 players took about 140 ms and landed on the first sword swing. AppDelegate now starts the sound system at launch, and the loading runs on the sound queue.
+- [x] **Sprite frames are cached.** `buildFrames` rendered every sheet offscreen on every enemy spawn (every floor, and every raid enemy). It now caches by sheet name and frame count, so each sheet is built once per launch. Tests: `SpriteFrameCacheTests`.
+- **After:** the same auto-combat sample shows the main thread **about 29% busy (was 48%)**. `SoundManager.play` is gone from the main thread, and the enemy-spawn cost fell from about 160 samples to 26.
+- [ ] Left alone:
+  - AVAudioPlayer's own "finished playing" callback, about 1% of the main thread. It always lands on main; AVAudioEngine would remove it.
+  - The title screen's 16 SwiftUI embers plus 3 looping animations, about 36% CPU in the simulator. They could be a single SpriteKit emitter or a `Canvas`.
+  - The ad web view's display link running while hidden (ads SDK).
+  - The offline catch-up simulation (up to 50k ticks on the main thread when the app reopens), which hasn't been timed yet.
+  - Running the unit tests on a simulator wipes that simulator's game save (`clearSave()` in the save tests). The tests should get their own UserDefaults suite.
+
 **3f. ASO**
 - [ ] New screenshots that show the greed tension (the new battle screen is the hero shot), keyword/title pass. (Partly outside the code.)
 

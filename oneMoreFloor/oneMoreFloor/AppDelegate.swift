@@ -15,9 +15,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         Analytics.setup()
         Analytics.appLaunched()
-        // Notification permission is no longer asked at launch — GameView asks
-        // after the tutorial's first camp, once the player has had some fun.
+        // Notification permission is no longer asked at launch — GameView offers
+        // it the first time the hero dies while the player is away.
         GameCenterManager.shared.authenticate()
+        // Start loading the sound players now (on their own queue), so they're
+        // ready long before the first sword swing instead of hitching it.
+        _ = SoundManager.shared
         return true
     }
 

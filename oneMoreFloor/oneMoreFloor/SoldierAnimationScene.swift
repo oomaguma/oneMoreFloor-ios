@@ -6,7 +6,24 @@ import SpriteKit
 // Internal (not private) so RaidScene.swift can share the same baker and helper.
 let _sheetBaker = SKView()
 
+/// Frames already built, keyed by sheet name + frame count. Building is the
+/// expensive part (an offscreen render of the whole sheet), and profiling
+/// showed it running on every enemy spawn — every floor, and every raid
+/// enemy — for sheets that never change. Now each sheet is built once per
+/// launch and reused. Main thread only, like the scenes that call it.
+private var _frameCache: [String: [SKTexture]] = [:]
+
 func buildFrames(_ spec: AnimationSpec) -> [SKTexture] {
+    let key = "\(spec.imageName)#\(spec.frameCount)"
+    if let cached = _frameCache[key] { return cached }
+    let frames = renderFrames(spec)
+    _frameCache[key] = frames
+    return frames
+}
+
+/// The uncached work: render the atlas-backed sheet into a plain texture and
+/// slice it into `frameCount` equal frames.
+private func renderFrames(_ spec: AnimationSpec) -> [SKTexture] {
     // Compiled .atlasc stores texture names with %20 for spaces; encode before lookup.
     let lookupName = spec.imageName.replacingOccurrences(of: " ", with: "%20")
     let raw = SKTexture(imageNamed: lookupName)
