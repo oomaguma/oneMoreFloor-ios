@@ -258,7 +258,7 @@ struct BattleHeaderView: View {
                         .contentTransition(.numericText())
                         .animation(.spring(response: 0.4), value: game.currentFloor)
                 }
-                Text("\(game.currentZone.icon) \(game.currentZone.shortName)")
+                Text("\(Image(systemName: game.currentZone.icon)) \(game.currentZone.shortName)")
                     .font(Theme.Fonts.label(12))
                     .foregroundStyle(Theme.Palette.dust)
                     .gameShadow(1)

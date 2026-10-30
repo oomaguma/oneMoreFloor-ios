@@ -57,6 +57,8 @@ struct Zone: Identifiable {
     let id: String
     let name: String
     let shortName: String
+    /// An SF Symbol name. (These used to be Unicode glyphs like ▪ and ◆, which
+    /// rendered as a stray black square next to the zone name on some screens.)
     let icon: String
     let minFloor: Int
     let maxFloor: Int?
@@ -375,13 +377,13 @@ class DungeonGame {
     // MARK: - Zone / enemy data
 
     static let zones: [Zone] = [
-        Zone(id: "entrance", name: "Dungeon Entrance", shortName: "Entrance",  icon: "▪", minFloor: 1,  maxFloor: 10),
-        Zone(id: "crypts",   name: "The Crypts",       shortName: "Crypts",    icon: "✦", minFloor: 11, maxFloor: 20),
-        Zone(id: "orc",      name: "Orc Stronghold",   shortName: "Orc Fort",  icon: "◆", minFloor: 21, maxFloor: 30),
-        Zone(id: "sunken",   name: "Sunken City",       shortName: "Sunken",    icon: "≈", minFloor: 31, maxFloor: 40),
-        Zone(id: "abyss",    name: "The Abyss",         shortName: "Abyss",     icon: "▼", minFloor: 41, maxFloor: 50),
-        Zone(id: "citadel",  name: "Iron Citadel",      shortName: "Citadel",   icon: "△", minFloor: 51, maxFloor: 60),
-        Zone(id: "hellgate", name: "Hell's Gate",       shortName: "Hell Gate", icon: "∞", minFloor: 61, maxFloor: nil),
+        Zone(id: "entrance", name: "Dungeon Entrance", shortName: "Entrance",  icon: "door.left.hand.open", minFloor: 1,  maxFloor: 10),
+        Zone(id: "crypts",   name: "The Crypts",       shortName: "Crypts",    icon: "cross.fill", minFloor: 11, maxFloor: 20),
+        Zone(id: "orc",      name: "Orc Stronghold",   shortName: "Orc Fort",  icon: "flag.fill", minFloor: 21, maxFloor: 30),
+        Zone(id: "sunken",   name: "Sunken City",       shortName: "Sunken",    icon: "water.waves", minFloor: 31, maxFloor: 40),
+        Zone(id: "abyss",    name: "The Abyss",         shortName: "Abyss",     icon: "tornado", minFloor: 41, maxFloor: 50),
+        Zone(id: "citadel",  name: "Iron Citadel",      shortName: "Citadel",   icon: "building.columns.fill", minFloor: 51, maxFloor: 60),
+        Zone(id: "hellgate", name: "Hell's Gate",       shortName: "Hell Gate", icon: "flame.fill", minFloor: 61, maxFloor: nil),
     ]
 
     static let zoneEnemyPools: [String: [EnemyType]] = [

@@ -243,7 +243,7 @@ struct RaidBriefingView: View {
                     .font(Theme.Fonts.label(11))
                     .tracking(2)
                     .foregroundStyle(accentRaid)
-                Text("\(game.currentZone.icon) \(game.currentZone.name)")
+                Text("\(Image(systemName: game.currentZone.icon)) \(game.currentZone.name)")
                     .font(Theme.Fonts.display(22))
                     .foregroundStyle(Theme.Palette.parchment)
                     .gameShadow(3)

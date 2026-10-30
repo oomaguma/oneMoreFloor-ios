@@ -4,167 +4,143 @@ private let privacyPolicyURL = URL(string: "https://github.com/oomaguma/oneMoreF
 
 // MARK: - Settings View
 
+/// Preferences, Game Center, legal, and credits. Styled like the rest of the
+/// game (display-font title, `.gamePanel` cards, palette colors) instead of a
+/// stock iOS settings list, so opening it doesn't feel like leaving the game.
 struct SettingsView: View {
     @AppStorage("com.oneMoreFloor.soundEnabled")         private var soundEnabled         = true
     @AppStorage("com.oneMoreFloor.hapticsEnabled")       private var hapticsEnabled       = true
     @AppStorage("com.oneMoreFloor.notificationsEnabled") private var notificationsEnabled = true
     @AppStorage("com.oneMoreFloor.autoEquipEnabled")     private var autoEquipEnabled     = true
 
-    private let bgColor   = Theme.Palette.abyss
-    private let cardColor = Theme.Palette.stone
-    private let gold      = Color(red: 0.90, green: 0.70, blue: 0.28)
-
     @State private var gcManager = GameCenterManager.shared
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                // Title, matching the Codex and the other sheets.
+                Text("SETTINGS")
+                    .font(Theme.Fonts.display(26))
+                    .foregroundStyle(Theme.Palette.parchment)
+                    .gameShadow(3)
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 20)
 
-                    // MARK: Preferences
-                    sectionHeader("PREFERENCES")
-
-                    VStack(spacing: 0) {
-                        toggleRow(
-                            icon: "speaker.wave.2.fill",
-                            iconColor: Color(red: 0.45, green: 0.72, blue: 1.00),
-                            title: "Sound Effects",
-                            isOn: $soundEnabled
-                        )
-                        rowDivider()
-                        toggleRow(
-                            icon: "iphone.radiowaves.left.and.right",
-                            iconColor: Color(red: 0.65, green: 0.45, blue: 1.00),
-                            title: "Vibration",
-                            isOn: $hapticsEnabled
-                        )
-                        rowDivider()
-                        toggleRow(
-                            icon: "bell.fill",
-                            iconColor: Color(red: 1.00, green: 0.65, blue: 0.20),
-                            title: "Notifications",
-                            isOn: $notificationsEnabled
-                        )
-                        rowDivider()
-                        toggleRow(
-                            icon: "shield.lefthalf.filled",
-                            iconColor: Color(red: 0.40, green: 0.85, blue: 0.55),
-                            title: "Auto-Equip Better Gear",
-                            isOn: $autoEquipEnabled
-                        )
-                    }
-                    .background(RoundedRectangle(cornerRadius: 12).fill(cardColor))
-
-                    // MARK: Game Center
-                    sectionHeader("GAME CENTER")
-
-                    Button { gcManager.showDashboard() } label: {
-                        HStack(spacing: 14) {
-                            Image(systemName: "gamecontroller.fill")
-                                .font(.system(size: 15))
-                                .foregroundStyle(Color(red: 0.45, green: 0.72, blue: 1.00))
-                                .frame(width: 26)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Leaderboards & Achievements")
-                                    .font(Theme.Fonts.label(14))
-                                    .foregroundStyle(gcManager.isAuthenticated ? .white : Color.white.opacity(0.35))
-                                if !gcManager.isAuthenticated {
-                                    Text("Sign in to Game Center to enable")
-                                        .font(Theme.Fonts.body(11))
-                                        .foregroundStyle(Color.white.opacity(0.30))
-                                }
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 12))
-                                .foregroundStyle(Color.white.opacity(0.25))
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(cardColor))
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(!gcManager.isAuthenticated)
-
-                    // MARK: Legal
-                    sectionHeader("LEGAL")
-
-                    linkRow(
-                        icon: "hand.raised.fill",
-                        iconColor: Color(red: 0.30, green: 0.85, blue: 0.45),
-                        title: "Privacy Policy",
-                        url: privacyPolicyURL
-                    )
-
-                    // MARK: Credits
-                    sectionHeader("CREDITS")
-
-                    VStack(spacing: 0) {
-                        creditRow(label: "Character & Enemy Art", value: "Zerie")
-                        rowDivider()
-                        creditRow(label: "Sound Effects", value: "Chequered Ink")
-                        rowDivider()
-                        adCreditRow()
-                    }
-                    .background(RoundedRectangle(cornerRadius: 12).fill(cardColor))
-
-                    // MARK: Version footer
-                    HStack {
-                        Spacer()
-                        VStack(spacing: 3) {
-                            Text("One More Floor")
-                                .font(Theme.Fonts.label(12))
-                                .foregroundStyle(Color.white.opacity(0.30))
-                            Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")")
-                                .font(Theme.Fonts.body(11))
-                                .foregroundStyle(Color.white.opacity(0.20))
-                        }
-                        Spacer()
-                    }
-                    .padding(.vertical, 8)
+                // MARK: Preferences
+                sectionHeader("PREFERENCES")
+                VStack(spacing: 0) {
+                    toggleRow(icon: "speaker.wave.2.fill", iconColor: Theme.Palette.frost,
+                              title: "Sound Effects", isOn: $soundEnabled)
+                    rowDivider()
+                    toggleRow(icon: "iphone.radiowaves.left.and.right", iconColor: Theme.Palette.shard,
+                              title: "Vibration", isOn: $hapticsEnabled)
+                    rowDivider()
+                    toggleRow(icon: "bell.fill", iconColor: Theme.Palette.flame,
+                              title: "Notifications", isOn: $notificationsEnabled)
+                    rowDivider()
+                    toggleRow(icon: "shield.lefthalf.filled", iconColor: Theme.Palette.life,
+                              title: "Auto-Equip Better Gear", isOn: $autoEquipEnabled)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 32)
+                .gamePanel(cornerRadius: 14)
+
+                // MARK: Game Center
+                sectionHeader("GAME CENTER")
+                Button { gcManager.showDashboard() } label: {
+                    HStack(spacing: 14) {
+                        rowIcon("gamecontroller.fill", color: Theme.Palette.frost)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Leaderboards & Achievements")
+                                .font(Theme.Fonts.label(14))
+                                .foregroundStyle(gcManager.isAuthenticated ? Theme.Palette.parchment : Theme.Palette.ash)
+                            if !gcManager.isAuthenticated {
+                                Text("Sign in to Game Center to enable")
+                                    .font(Theme.Fonts.body(11))
+                                    .foregroundStyle(Theme.Palette.ash)
+                            }
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.Palette.ash)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+                    .gamePanel(cornerRadius: 14)
+                }
+                .buttonStyle(.plain)
+                .disabled(!gcManager.isAuthenticated)
+
+                // MARK: Legal
+                sectionHeader("LEGAL")
+                linkRow(icon: "hand.raised.fill", iconColor: Theme.Palette.life,
+                        title: "Privacy Policy", url: privacyPolicyURL)
+
+                // MARK: Credits
+                sectionHeader("CREDITS")
+                VStack(spacing: 0) {
+                    creditRow(label: "Character & Enemy Art", value: "Zerie")
+                    rowDivider()
+                    creditRow(label: "Sound Effects", value: "Chequered Ink")
+                    rowDivider()
+                    adCreditRow()
+                }
+                .gamePanel(cornerRadius: 14)
+
+                // MARK: Version footer
+                VStack(spacing: 3) {
+                    Text("ONE MORE FLOOR")
+                        .font(Theme.Fonts.display(13))
+                        .tracking(2)
+                        .foregroundStyle(Theme.Palette.flame.opacity(0.7))
+                    Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")")
+                        .font(Theme.Fonts.body(11))
+                        .foregroundStyle(Theme.Palette.ash)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
             }
-            .scrollContentBackground(.hidden)
-            .background(bgColor.ignoresSafeArea())
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Theme.Palette.stone, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .preferredColorScheme(.dark)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 32)
         }
+        .background(Theme.Palette.abyss.ignoresSafeArea())
+        .preferredColorScheme(.dark)
     }
 
     // MARK: - Reusable components
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(Theme.Fonts.label(11))
-            .foregroundStyle(gold.opacity(0.80))
-            .padding(.bottom, -8)
+            .font(Theme.Fonts.label(12))
+            .tracking(2)
+            .foregroundStyle(Theme.Palette.dust)
+            .padding(.bottom, -10)
+    }
+
+    /// The colored icon at the start of each row, in a small tinted tile.
+    private func rowIcon(_ name: String, color: Color) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(color)
+            .frame(width: 30, height: 30)
+            .background(RoundedRectangle(cornerRadius: 8).fill(color.opacity(0.15)))
     }
 
     private func rowDivider() -> some View {
         Rectangle()
-            .fill(Color.white.opacity(0.07))
+            .fill(Theme.Palette.stoneEdge.opacity(0.4))
             .frame(height: 1)
-            .padding(.leading, 56)
+            .padding(.leading, 60)
     }
 
     private func toggleRow(icon: String, iconColor: Color, title: String, isOn: Binding<Bool>) -> some View {
         HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 15))
-                .foregroundStyle(iconColor)
-                .frame(width: 26)
+            rowIcon(icon, color: iconColor)
             Text(title)
                 .font(Theme.Fonts.label(14))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.Palette.parchment)
             Spacer()
             Toggle("", isOn: isOn)
-                .tint(gold)
+                .tint(Theme.Palette.gold)
                 .labelsHidden()
         }
         .padding(.horizontal, 16)
@@ -174,21 +150,18 @@ struct SettingsView: View {
     private func linkRow(icon: String, iconColor: Color, title: String, url: URL) -> some View {
         Link(destination: url) {
             HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.system(size: 15))
-                    .foregroundStyle(iconColor)
-                    .frame(width: 26)
+                rowIcon(icon, color: iconColor)
                 Text(title)
                     .font(Theme.Fonts.label(14))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Theme.Palette.parchment)
                 Spacer()
                 Image(systemName: "arrow.up.right")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Color.white.opacity(0.35))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.ash)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .background(RoundedRectangle(cornerRadius: 12).fill(cardColor))
+            .gamePanel(cornerRadius: 14)
         }
     }
 
@@ -196,11 +169,11 @@ struct SettingsView: View {
         HStack {
             Text(label)
                 .font(Theme.Fonts.label(13))
-                .foregroundStyle(Color.white.opacity(0.50))
+                .foregroundStyle(Theme.Palette.dust)
             Spacer()
             Text(value)
                 .font(Theme.Fonts.label(13))
-                .foregroundStyle(.white)
+                .foregroundStyle(Theme.Palette.parchment)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 13)
@@ -210,10 +183,10 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 5) {
             Text("Advertising")
                 .font(Theme.Fonts.label(13))
-                .foregroundStyle(Color.white.opacity(0.50))
+                .foregroundStyle(Theme.Palette.dust)
             Text("Google AdMob + UMP. Ads respect your ATT preference.")
                 .font(Theme.Fonts.body(11))
-                .foregroundStyle(Color.white.opacity(0.30))
+                .foregroundStyle(Theme.Palette.ash)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.horizontal, 16)

@@ -1,6 +1,6 @@
 # oneMoreFloor — The Overhaul
 
-**Status:** Phases 1 & 2 complete & compiling clean (2026-06-22), under active playtest/tuning. Phase 3 (UI overhaul) in progress on `feature/glow-up` (2026-10-29): design system, battle screen, and every main screen/overlay restyled; Settings/Store/Raid hand-polish, onboarding, retention loops, and ASO still to do. Phase 4 (monetization) not started; some Phase 4 rewarded-ad placements landed early.
+**Status:** Phases 1 & 2 complete & compiling clean (2026-06-22), under active playtest/tuning. Phase 3 (UI overhaul) in progress on `feature/glow-up` (2026-10-29): design system, battle screen, and every main screen/overlay restyled; Settings, Store, raid, onboarding and retention loops are done (see 3c–3e); ASO is still to do. Phase 4 (monetization) not started; some Phase 4 rewarded-ad placements landed early.
 **Goal:** Turn a passive idle game into the push-your-luck climber its title promises.
 
 This is the living design + build spec for the overhaul. It is the source of truth — keep it current as we build. When a mechanic changes in code, change it here too.
@@ -138,7 +138,11 @@ The smallest change that fixes the dead first session. Ship it, watch D1/D7 move
 - [x] Quests → display header, themed gold/green progress bars. Prestige → chunky PRESTIGE / RETIRE.
 - [x] Floor-event cards → centered glowing icon, category tag, display title, shrine cost line ("Costs 40 · you have 52", red when short), chunky choice buttons. The curse category is labelled **GAMBLE** (they're optional 50/50s, not something that already happened).
 - [x] Quests → claimable first / claimed last, icon tile per quest type, gold progress bars, pulsing chunky CLAIM; Daily Champion moved to the top as a bonus card. Fixed: its progress bar always drew full — now claimed / total.
-- [ ] Hand-polish still pending: Settings, Store, map (token-migrated only).
+- [x] **Hand-polish (2026-10-30):**
+  - Settings and Store dropped their stock navigation bars for a display-font title and `.gamePanel` cards. Settings rows have tinted icon tiles and gold toggles.
+  - The Store leads with an honest "Support the game" header, tints each card per product, uses chunky gold price buttons and an OWNED badge, and has a close button.
+  - Zone icons moved from Unicode glyphs (▪ ✦ ◆…, which drew a stray black square beside "Entrance") to SF Symbols.
+  - `MapView` was dead code (never shown anywhere) and was deleted rather than restyled.
 - [x] PRESTIGE now asks for confirmation (it resets the run; Retire already did).
 - [x] **Dailies cut from 12 to 3** (2026-10-29): one easy, one medium, one stretch per day (`DungeonGame.questTiers`), chosen deterministically from the date with no repeated quest type. Multi-hour goals (350 kills, 12 bosses, 2,000 gold, floor 40+) were removed from the daily pool. Daily Champion is now "claim all 3" (still 20 ◈). Covered by `oneMoreFloorTests/DailyQuestTests.swift` across every day of 2026. Note: on update day, players mid-day see their list change once (old ids drop out).
 - [ ] Pixel display font (OFL) — swap `Theme.Fonts.display` to `.custom(...)`; needs the font file added to the bundle.

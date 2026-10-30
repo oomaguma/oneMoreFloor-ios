@@ -583,8 +583,10 @@ struct ZoneUnlockOverlay: View {
                     .foregroundStyle(Color(red: 0.35, green: 0.85, blue: 0.45))
                     .padding(.bottom, 14)
 
-                Text(zone.icon)
+                Image(systemName: zone.icon)
                     .font(.system(size: 52))
+                    .foregroundStyle(Theme.Palette.life)
+                    .symbolEffect(.bounce, value: zone.id)
                     .padding(.bottom, 10)
 
                 Text(zone.name.uppercased())

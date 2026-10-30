@@ -165,7 +165,7 @@ struct RaidView: View {
                     .font(Theme.Fonts.display(20))
                     .foregroundStyle(accentRaid)
                     .gameShadow(2)
-                Text("\(game.currentZone.icon) \(game.currentZone.shortName) · floor \(game.currentFloor)")
+                Text("\(Image(systemName: game.currentZone.icon)) \(game.currentZone.shortName) · floor \(game.currentFloor)")
                     .font(Theme.Fonts.label(12))
                     .foregroundStyle(Theme.Palette.dust)
                     .gameShadow(1)
