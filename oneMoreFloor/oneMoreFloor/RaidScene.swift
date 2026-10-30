@@ -24,6 +24,13 @@ final class RaidEnemy {
     // Bumped each time a new damage hit is queued, so stale delayed closures bail out.
     var generation: Int = 0
 
+    /// Bosses telegraph heavy attacks more often (same split as the dungeon).
+    let isBoss: Bool
+    /// True while this enemy is winding up a heavy attack (the red "!" is up).
+    var isWindingUp = false
+    /// The "!" floating over a winding-up enemy; nil the rest of the time.
+    var warningNode: SKLabelNode?
+
     // Animation frames loaded from the sprite atlas
     let idleFrames:   [SKTexture]
     let attackFrames: [[SKTexture]]
@@ -49,6 +56,7 @@ final class RaidEnemy {
         self.attackFrames = attackFrames
         self.hurtFrames   = hurtFrames
         self.deathFrames  = deathFrames
+        self.isBoss       = isBoss
         // Bosses swing harder but slower; minions attack faster.
         self.attackInterval = isBoss ? 2.2 : 1.6
         // Stagger first attacks so enemies don't all swing at once.
@@ -116,6 +124,12 @@ class RaidScene: SKScene {
     var onHeroHurt: (() -> Void)?
     /// Fired on a critical strike (drives the screen shake).
     var onHeroCrit: (() -> Void)?
+    /// Ability cooldown as a fraction of its full length (1 = just used, 0 = ready).
+    var onAbilityCooldown: ((Double) -> Void)?
+    /// True while at least one enemy is winding up a heavy — light up DODGE.
+    var onHeavyWarning: ((Bool) -> Void)?
+    /// A heavy (or any hit) was dodged.
+    var onDodged: (() -> Void)?
 
     // MARK: - Immutable hero config
 
@@ -135,6 +149,11 @@ class RaidScene: SKScene {
     private let splashFraction:   Double   // War Surge: share of each strike that hits a second enemy
     private let thornsFraction:   Double   // Thorn Mantle: share of incoming damage reflected
     private let killHealFraction: Double   // Blood Rush: share of max HP restored per kill
+
+    // The class's signature ability works in raids too (Phase 3 raid glow-up).
+    // Its cooldown arrives already scaled by Adrenaline.
+    let ability: Ability
+    private let abilityCooldown: TimeInterval
 
     // MARK: - Layout model
     //
@@ -183,6 +202,33 @@ class RaidScene: SKScene {
     /// HP restored during the breather between waves, as a share of max HP.
     static let breatherHealFraction: Double = 0.15
 
+    /// Heavy attacks in raids (2026-10-30). Enemies sometimes wind up a heavy:
+    /// a red "!" for `heavyWindup` seconds, then a hit for `heavyMultiplier`×.
+    /// DODGE in time and it whiffs. Chances match the dungeon. The multiplier is
+    /// lower than the dungeon's 2× because raids are real-time and several
+    /// enemies can wind up at once — the sim showed 2× made raids harder for
+    /// players who stake blessings but don't tap, while 1.5× left that path
+    /// unchanged and still rewards dodging.
+    static let heavyChanceNormal = DungeonGame.heavyChanceNormal
+    static let heavyChanceBoss   = DungeonGame.heavyChanceBoss
+    static let heavyMultiplier: Double = 1.5
+    static let heavyWindup: TimeInterval = 0.9
+    /// How long one DODGE keeps the hero untouchable, and how soon it can be used again.
+    static let dodgeWindow:   TimeInterval = 0.5
+    static let dodgeCooldown: TimeInterval = 1.2
+    /// Gap between the strikes of a burst ability (Power Strike, Fireball…).
+    static let burstHitGap: TimeInterval = 0.13
+
+    /// Damage one enemy hit deals to the hero: heavy hits are multiplied, DEF
+    /// is subtracted, then an active guard (Shield Wall) cuts what's left.
+    /// Static so tests can check the formula without building a scene.
+    static func incomingDamage(atk: Int, def: Int, heavy: Bool, guardReduction: Double) -> Int {
+        let raw = heavy ? Int(Double(atk) * heavyMultiplier) : atk
+        var dmg = max(1, raw - def)
+        if guardReduction > 0 { dmg = max(1, Int(Double(dmg) * (1 - guardReduction))) }
+        return dmg
+    }
+
     /// Enemies per wave: 2, 3, 4 (was 3, 4, 5).
     static func enemyCount(wave: Int) -> Int { wave + 1 }
 
@@ -203,6 +249,18 @@ class RaidScene: SKScene {
     private var isSpawningWave = false
     /// Latched true once the final outcome is decided (all waves or hero dead).
     private var isRaidOver = false
+
+    // Ability, guard, and dodge timers (seconds, counting down in update()).
+    private var abilityCooldownRemaining: TimeInterval = 0   // ready from the start
+    private var lastReportedCooldown: Double = -1
+    private var guardRemaining: TimeInterval = 0
+    private var guardReduction: Double = 0
+    private var dodgeRemaining: TimeInterval = 0
+    private var dodgeCooldownRemaining: TimeInterval = 0
+    private var wasHeavyIncoming = false
+
+    var isAbilityReady: Bool { abilityCooldownRemaining <= 0 }
+    var canDodge: Bool { dodgeCooldownRemaining <= 0 }
 
     // MARK: - Sprite nodes
 
@@ -237,7 +295,8 @@ class RaidScene: SKScene {
          heroHp: Int, heroMaxHp: Int, heroAtk: Int, heroDef: Int,
          zoneID: String, floor: Int,
          critChance: Double, splashFraction: Double = 0,
-         thornsFraction: Double = 0, killHealFraction: Double = 0) {
+         thornsFraction: Double = 0, killHealFraction: Double = 0,
+         abilityCooldown: TimeInterval? = nil) {
         self.heroClass = hero
         self.heroHp    = heroHp
         self.heroMaxHp = heroMaxHp
@@ -249,6 +308,8 @@ class RaidScene: SKScene {
         self.splashFraction   = splashFraction
         self.thornsFraction   = thornsFraction
         self.killHealFraction = killHealFraction
+        self.ability          = hero.signatureAbility
+        self.abilityCooldown  = abilityCooldown ?? hero.signatureAbility.cooldown
         // Wider aspect ratio than the 1v1 CombatScene — we need horizontal room
         // for enemies walking in from the right side.
         super.init(size: CGSize(width: 300, height: 160))
@@ -350,6 +411,7 @@ class RaidScene: SKScene {
         onWaveChanged?(wave, totalWaves)
         // The SwiftUI layer shows the big "WAVE 2" / "BOSS WAVE" banner.
         onWaveStarted?(wave, totalWaves, wave == totalWaves)
+        if wave == totalWaves { SoundManager.shared.play("boss_arrives") }
 
         let pool     = DungeonGame.zoneEnemyPools[zoneID] ?? [EnemyType.skeleton]
         let bossType = DungeonGame.zoneBossEnemies[zoneID]
@@ -425,6 +487,8 @@ class RaidScene: SKScene {
         lastUpdateTime = currentTime
 
         guard !isRaidOver else { return }
+
+        tickTimers(dt)
 
         // Track enemy positions with their HP bars.
         for enemy in raidEnemies where !enemy.isDead {
@@ -534,7 +598,7 @@ class RaidScene: SKScene {
         let isCrit = Double.random(in: 0...1) < critChance
         let dmg    = max(1, isCrit ? heroAtk * 2 : heroAtk)
         enemy.hp  -= dmg
-        SoundManager.shared.play(Bool.random() ? "sword_slice" : "sword_light")
+        SoundManager.shared.play("swing")
 
         let hitPos = CGPoint(x: enemy.node.position.x + 6, y: enemy.node.position.y + 20)
 
@@ -542,6 +606,7 @@ class RaidScene: SKScene {
             floatText("\(dmg)!", at: hitPos,
                       color: UIColor(red: 1.0, green: 0.88, blue: 0.12, alpha: 1), fontSize: 16)
             hitStop(0.07)
+            SoundManager.shared.play("crit")
             onHeroCrit?()
         } else {
             floatText("-\(dmg)", at: hitPos,
@@ -596,7 +661,14 @@ class RaidScene: SKScene {
     // MARK: - Enemy combat
 
     private func enemyAttacks(_ enemy: RaidEnemy) {
-        guard !isRaidOver, !heroIsDeathPlaying else { return }
+        guard !isRaidOver, !heroIsDeathPlaying, !enemy.isWindingUp else { return }
+
+        // Sometimes the swing is a telegraphed heavy instead (see knobs above).
+        let heavyChance = enemy.isBoss ? Self.heavyChanceBoss : Self.heavyChanceNormal
+        if Double.random(in: 0...1) < heavyChance {
+            startHeavyWindup(enemy)
+            return
+        }
 
         // Enemy plays its attack animation.
         let i    = Int.random(in: 0..<enemy.attackFrames.count)
@@ -611,15 +683,30 @@ class RaidScene: SKScene {
         enemy.node.run(.sequence([anim, idle]), withKey: "anim")
         SoundManager.shared.play("punch")
 
-        // Calculate and apply damage to the hero.
-        let dmg = max(1, enemy.atk - heroDef)
+        hurtHero(by: enemy, heavy: false)
+    }
+
+    /// One enemy hit landing on the hero: DODGE negates it; otherwise DEF,
+    /// guard, Thorn Mantle and death all happen here, for normal and heavy hits.
+    private func hurtHero(by enemy: RaidEnemy, heavy: Bool) {
+        if dodgeRemaining > 0 {
+            floatText(heavy ? "DODGED!" : "MISS", at: CGPoint(x: 44, y: 86),
+                      color: UIColor(red: 0.45, green: 0.85, blue: 1.0, alpha: 1), fontSize: heavy ? 15 : 12)
+            if heavy { SoundManager.shared.play("dodged") }
+            onDodged?()
+            return
+        }
+
+        let dmg = Self.incomingDamage(atk: enemy.atk, def: heroDef, heavy: heavy,
+                                      guardReduction: guardRemaining > 0 ? guardReduction : 0)
         heroHp  = max(0, heroHp - dmg)
         onHeroHpChanged?(heroHp, heroMaxHp)
 
-        floatText("-\(dmg)", at: CGPoint(x: 44, y: 78),
-                  color: UIColor(red: 1.0, green: 0.28, blue: 0.28, alpha: 1))
+        floatText(heavy ? "-\(dmg)!" : "-\(dmg)", at: CGPoint(x: 44, y: 78),
+                  color: UIColor(red: 1.0, green: 0.28, blue: 0.28, alpha: 1), fontSize: heavy ? 17 : 13)
         playHeroHurt()
         onHeroHurt?()
+        if heavy { hitStop(0.08) }
 
         // Thorn Mantle: reflect part of the hit back. Like the dungeon version it
         // can't land the killing blow — it stops at 1 HP.
@@ -632,6 +719,157 @@ class RaidScene: SKScene {
 
         if heroHp <= 0 {
             endRaid(success: false)
+        }
+    }
+
+    // MARK: - Heavy attacks + dodge
+
+    /// The enemy rears back: a pulsing red "!" over its head and a red tint for
+    /// `heavyWindup` seconds, then the heavy lands (or whiffs, if you dodged).
+    private func startHeavyWindup(_ enemy: RaidEnemy) {
+        enemy.isWindingUp = true
+        // The wind-up eats into its next swing, so heavies don't stack on normals.
+        enemy.attackTimer += Self.heavyWindup
+
+        let mark = SKLabelNode(text: "!")
+        mark.fontName  = "AvenirNext-Heavy"
+        mark.fontSize  = 20
+        mark.fontColor = UIColor(red: 1.0, green: 0.25, blue: 0.25, alpha: 1)
+        mark.position  = CGPoint(x: enemy.node.position.x, y: enemy.node.position.y + 30)
+        mark.zPosition = 25
+        mark.run(.repeatForever(.sequence([.scale(to: 1.35, duration: 0.15), .scale(to: 1.0, duration: 0.15)])))
+        world.addChild(mark)
+        enemy.warningNode = mark
+
+        enemy.node.color = .red
+        enemy.node.run(.repeatForever(.sequence([
+            .colorize(withColorBlendFactor: 0.55, duration: 0.15),
+            .colorize(withColorBlendFactor: 0.0,  duration: 0.15)
+        ])), withKey: "windup")
+        SoundManager.shared.play("heavy_windup")
+
+        run(.sequence([
+            .wait(forDuration: Self.heavyWindup),
+            .run { [weak self, weak enemy] in
+                guard let self, let enemy else { return }
+                self.resolveHeavy(enemy)
+            }
+        ]))
+    }
+
+    private func resolveHeavy(_ enemy: RaidEnemy) {
+        clearWindup(enemy)
+        guard !enemy.isDead, !isRaidOver, !heroIsDeathPlaying else { return }
+        // The swing itself.
+        if !enemy.attackFrames.isEmpty {
+            let anim = SKAction.animate(with: enemy.attackFrames[0], timePerFrame: 0.08)
+            let idle = SKAction.run { [weak enemy] in
+                guard let enemy, !enemy.isDead else { return }
+                enemy.node.run(.repeatForever(.animate(with: enemy.idleFrames, timePerFrame: 0.12)), withKey: "anim")
+            }
+            enemy.node.run(.sequence([anim, idle]), withKey: "anim")
+        }
+        hurtHero(by: enemy, heavy: true)
+    }
+
+    /// Removes the "!" and red tint (also used when the enemy dies mid-wind-up).
+    private func clearWindup(_ enemy: RaidEnemy) {
+        enemy.isWindingUp = false
+        enemy.warningNode?.removeFromParent()
+        enemy.warningNode = nil
+        enemy.node.removeAction(forKey: "windup")
+        enemy.node.colorBlendFactor = 0
+    }
+
+    /// Called by RaidView's DODGE button: a short window where nothing lands.
+    /// The cooldown stops it being held down as permanent invincibility.
+    func playerDodge() {
+        guard canDodge, !isRaidOver, !heroIsDeathPlaying else { return }
+        dodgeRemaining         = Self.dodgeWindow
+        dodgeCooldownRemaining = Self.dodgeCooldown
+        // A quick hop back, half-transparent while untouchable.
+        heroNode.run(.sequence([
+            .group([.moveBy(x: -14, y: 4, duration: 0.10), .fadeAlpha(to: 0.55, duration: 0.10)]),
+            .wait(forDuration: Self.dodgeWindow - 0.1),
+            .group([.moveBy(x: 14, y: -4, duration: 0.15), .fadeAlpha(to: 1.0, duration: 0.15)])
+        ]), withKey: "dodge")
+        SoundManager.shared.play("dodge")
+    }
+
+    // MARK: - Class ability
+
+    /// Called by RaidView's ability button. Same three effects as the dungeon:
+    /// a burst of rapid strikes, a heal, or a guard that cuts incoming damage.
+    /// Returns false (and keeps the cooldown) when it can't do anything useful,
+    /// e.g. a burst with no enemy in range.
+    @discardableResult
+    func useAbility() -> Bool {
+        guard isAbilityReady, !isRaidOver, !heroIsDeathPlaying, !isAwaitingDecision else { return false }
+        switch ability.effect {
+        case .burst(let hits):
+            guard raidEnemies.contains(where: { !$0.isDead && $0.node.position.x <= heroHitRange }) else { return false }
+            floatText(ability.name.uppercased(), at: CGPoint(x: 70, y: 104),
+                      color: UIColor(red: 1.0, green: 0.80, blue: 0.28, alpha: 1), fontSize: 13)
+            for i in 0..<hits {
+                run(.sequence([
+                    .wait(forDuration: Double(i) * Self.burstHitGap),
+                    .run { [weak self] in self?.burstStrike() }
+                ]))
+            }
+        case .heal(let fraction):
+            let heal = max(1, Int(Double(heroMaxHp) * fraction))
+            heroHp = min(heroMaxHp, heroHp + heal)
+            onHeroHpChanged?(heroHp, heroMaxHp)
+            floatText("+\(heal)", at: CGPoint(x: 44, y: 86),
+                      color: UIColor(red: 0.20, green: 0.90, blue: 0.38, alpha: 1), fontSize: 16)
+            SoundManager.shared.play("heal")
+        case .guardUp(let seconds, let reduction):
+            guardRemaining = seconds
+            guardReduction = reduction
+            floatText(ability.name.uppercased(), at: CGPoint(x: 70, y: 104),
+                      color: UIColor(red: 0.45, green: 0.85, blue: 1.0, alpha: 1), fontSize: 13)
+            // A blue tint on the hero while the guard is up.
+            heroNode.color = UIColor(red: 0.45, green: 0.75, blue: 1.0, alpha: 1)
+            heroNode.colorBlendFactor = 0.45
+        }
+        abilityCooldownRemaining = abilityCooldown
+        return true
+    }
+
+    /// One hit of a burst ability: an immediate strike on the focused (or
+    /// nearest) enemy in range. Each hit can crit, splash, and kill.
+    private func burstStrike() {
+        guard !isRaidOver, !heroIsDeathPlaying else { return }
+        let inRange = raidEnemies.filter { !$0.isDead && $0.node.position.x <= heroHitRange }
+        let focused = focusTarget.flatMap { f in inRange.first { $0 === f } }
+        guard let target = focused ?? inRange.min(by: { $0.node.position.x < $1.node.position.x }) else { return }
+        playHeroAttack()
+        applyHeroDamageTo(target)
+    }
+
+    /// Counts down the ability, guard, and dodge timers, and tells the view
+    /// about cooldown progress and incoming heavies.
+    private func tickTimers(_ dt: TimeInterval) {
+        if abilityCooldownRemaining > 0 { abilityCooldownRemaining = max(0, abilityCooldownRemaining - dt) }
+        if dodgeRemaining > 0           { dodgeRemaining = max(0, dodgeRemaining - dt) }
+        if dodgeCooldownRemaining > 0   { dodgeCooldownRemaining = max(0, dodgeCooldownRemaining - dt) }
+        if guardRemaining > 0 {
+            guardRemaining = max(0, guardRemaining - dt)
+            if guardRemaining == 0 { heroNode.colorBlendFactor = 0 }
+        }
+
+        // Report cooldown in 2% steps, so SwiftUI isn't redrawn 60 times a second.
+        let fraction = abilityCooldown > 0 ? abilityCooldownRemaining / abilityCooldown : 0
+        let stepped  = (fraction * 50).rounded(.up) / 50
+        if stepped != lastReportedCooldown {
+            lastReportedCooldown = stepped
+            onAbilityCooldown?(stepped)
+        }
+
+        let heavyIncoming = raidEnemies.contains { $0.isWindingUp && !$0.isDead }
+        if heavyIncoming != wasHeavyIncoming {
+            wasHeavyIncoming = heavyIncoming
+            onHeavyWarning?(heavyIncoming)
         }
     }
 
@@ -747,7 +985,7 @@ class RaidScene: SKScene {
             )
         }
         heroNode.run(.sequence([anim, idle]), withKey: "anim")
-        SoundManager.shared.play("punch_2")
+        SoundManager.shared.play("hero_hurt")
     }
 
     private func playHeroDeath() {
@@ -777,12 +1015,14 @@ class RaidScene: SKScene {
                     )
                 }
                 enemy.node.run(.sequence([anim, idle]), withKey: "anim")
-                SoundManager.shared.play("crunch_quick")
+                SoundManager.shared.play("enemy_hit")
             }
         ]))
     }
 
     private func playEnemyDeath(_ enemy: RaidEnemy) {
+        // Killing an enemy mid-wind-up cancels its heavy.
+        clearWindup(enemy)
         // Stop the walk action so the enemy doesn't keep advancing after dying.
         enemy.node.removeAction(forKey: "walk")
         enemy.hpBarBg.removeFromParent()
@@ -797,7 +1037,7 @@ class RaidScene: SKScene {
                     .animate(with: enemy.deathFrames, timePerFrame: 0.15),
                     withKey: "anim"
                 )
-                SoundManager.shared.play("crunch_quick")
+                SoundManager.shared.play("enemy_death")
                 // Clean up the sprite after the death animation finishes.
                 let totalDuration = TimeInterval(enemy.deathFrames.count) * 0.15 + 0.4
                 enemy.node.run(.sequence([

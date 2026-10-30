@@ -36,6 +36,7 @@ struct RestSiteCardView: View {
                                  game.launchRaid()
                              },
                              onBack: {
+                                 SoundManager.shared.play("ui_back")
                                  Analytics.raidBriefingBackedOut(floor: game.currentFloor,
                                                                  danger: game.raidDanger.rawValue)
                                  withAnimation(.spring(response: 0.35)) { showRaidBriefing = false }
@@ -136,12 +137,12 @@ struct RestSiteCardView: View {
                 choiceButton(label: "DESCEND",
                              icon: "arrow.down.to.line",
                              summary: "Greed climbs",
-                             accent: accentDescend) { trackChoice("descend"); game.descendPastRestSite() }
+                             accent: accentDescend) { SoundManager.shared.play("ui_confirm"); trackChoice("descend"); game.descendPastRestSite() }
 
                 choiceButton(label: "REST",
                              icon: "tent.fill",
                              summary: "Bank \(game.atRiskGold) · heal",
-                             accent: accentRest) { trackChoice("rest"); game.rest() }
+                             accent: accentRest) { SoundManager.shared.play("ui_confirm"); trackChoice("rest"); game.rest() }
             }
             .frame(height: 76)
 
@@ -153,6 +154,7 @@ struct RestSiteCardView: View {
                          icon: "flag.2.crossed.fill",
                          summary: "Win +\(game.raidShardReward) ◈ · see the briefing",
                          accent: accentRaid) {
+                SoundManager.shared.play("ui_confirm")
                 Analytics.raidBriefingOpened(floor: game.currentFloor, danger: game.raidDanger.rawValue)
                 withAnimation(.spring(response: 0.35)) { showRaidBriefing = true }
             }

@@ -28,6 +28,10 @@ struct RaidView: View {
     // Juice triggers, bumped by scene callbacks.
     @State private var shakeTrigger = 0
     @State private var hurtTrigger  = 0
+    /// Ability cooldown, 1 = just used … 0 = ready (driven by the scene).
+    @State private var abilityCooldown: Double = 0
+    /// An enemy is winding up a heavy: the DODGE button lights up.
+    @State private var heavyIncoming = false
 
     private let accentRaid = Color(red: 0.75, green: 0.35, blue: 1.00)
 
@@ -50,7 +54,8 @@ struct RaidView: View {
             critChance:       game.heroCritChance,
             splashFraction:   game.splashFraction,
             thornsFraction:   game.thornsFraction,
-            killHealFraction: game.killHealFraction
+            killHealFraction: game.killHealFraction,
+            abilityCooldown:  game.character.signatureAbility.cooldown * game.abilityCooldownScale
         ))
     }
 
@@ -140,6 +145,16 @@ struct RaidView: View {
         }
         raidScene.onHeroHurt = { hurtTrigger += 1 }
         raidScene.onHeroCrit = { shakeTrigger += 1; Haptics.impact(.heavy) }
+        raidScene.onAbilityCooldown = { fraction in
+            // A soft ping the moment the ability comes back.
+            if abilityCooldown > 0 && fraction == 0 { SoundManager.shared.play("ability_ready") }
+            abilityCooldown = fraction
+        }
+        raidScene.onHeavyWarning = { incoming in
+            withAnimation(.spring(response: 0.25)) { heavyIncoming = incoming }
+            if incoming { Haptics.impact(.rigid) }
+        }
+        raidScene.onDodged = { Haptics.notify(.success) }
         raidScene.onRaidCompleted = { success in
             // Resolve immediately: rewards/penalties land now, not on Continue.
             game.completeRaid(success: success, heroHpAfterRaid: raidScene.heroHp)
@@ -247,9 +262,72 @@ struct RaidView: View {
             Label("Tap an enemy to focus it · tap anywhere to strike", systemImage: "hand.tap.fill")
                 .font(Theme.Fonts.label(11))
                 .foregroundStyle(Theme.Palette.dust)
+            raidActions
+                .padding(.top, 4)
         }
         .padding(14)
         .gamePanel(cornerRadius: 16)
+    }
+
+    // MARK: - Ability + Dodge
+
+    /// The class ability (left) and DODGE (right). DODGE glows red and
+    /// pulses while an enemy is winding up a heavy — that's the cue to press it.
+    private var raidActions: some View {
+        let ability = game.character.signatureAbility
+        let ready   = abilityCooldown <= 0
+        return HStack(spacing: 10) {
+            Button {
+                if raidScene.useAbility() { Haptics.impact(.heavy) }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: ability.icon)
+                        .font(.system(size: 18, weight: .bold))
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(ability.name.uppercased())
+                            .font(Theme.Fonts.display(13))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Text(ready ? "READY" : "COOLING")
+                            .font(Theme.Fonts.label(9))
+                            .opacity(0.75)
+                    }
+                }
+                .foregroundStyle(ready ? Color.black.opacity(0.8) : Theme.Palette.ash)
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ChunkyButtonStyle(face: ready ? Theme.Palette.flame : Theme.Palette.stoneHi,
+                                           lip: ready ? Theme.Palette.flame.mix(with: .black, by: 0.5) : .black,
+                                           cornerRadius: 12, depth: 4))
+            // The cooldown drains away left-to-right over the button.
+            .overlay(alignment: .leading) {
+                GeometryReader { geo in
+                    Rectangle()
+                        .fill(Color.black.opacity(0.35))
+                        .frame(width: geo.size.width * abilityCooldown)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .allowsHitTesting(false)
+            }
+            .disabled(!ready || !isFighting)
+
+            Button {
+                raidScene.playerDodge()
+                Haptics.impact(.light)
+            } label: {
+                Label("DODGE", systemImage: "figure.run")
+                    .font(Theme.Fonts.display(16))
+                    .foregroundStyle(heavyIncoming ? .white : Theme.Palette.parchment)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(ChunkyButtonStyle(face: heavyIncoming ? Theme.Palette.blood : Theme.Palette.stoneHi,
+                                           lip: heavyIncoming ? Theme.Palette.blood.mix(with: .black, by: 0.5) : .black,
+                                           cornerRadius: 12, depth: 4))
+            .scaleEffect(heavyIncoming ? 1.06 : 1)
+            .shadow(color: heavyIncoming ? Theme.Palette.blood.opacity(0.7) : .clear, radius: 10)
+            .disabled(!isFighting)
+        }
+        .frame(height: 52)
     }
 
     // MARK: - Between-wave decision

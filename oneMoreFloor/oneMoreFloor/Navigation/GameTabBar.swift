@@ -59,6 +59,7 @@ struct CustomGameTabBar: View {
 
         return Button {
             Haptics.impact(.light)
+            SoundManager.shared.play("ui_tab")
             selectedTab = def.tab
         } label: {
             VStack(spacing: 3) {

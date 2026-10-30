@@ -272,7 +272,7 @@ class CombatScene: SKScene {
         guard isReady, !isHeroDeathPlaying else { return }
         let i = Int.random(in: 0..<heroAttackFrameSets.count)
         heroOneShot(heroAttackFrameSets[i], fps: 0.10)
-        SoundManager.shared.play(Bool.random() ? "sword_slice" : "sword_light")
+        SoundManager.shared.play("swing")
         if let tex = heroProjectileTexture {
             run(.sequence([.wait(forDuration: 0.35),
                            .run { [weak self] in self?.fireProjectile(texture: tex, fromHero: true) }]))
@@ -282,7 +282,7 @@ class CombatScene: SKScene {
     func playHeroHurt() {
         guard isReady, !isHeroDeathPlaying else { return }
         heroOneShot(heroHurtFrames, fps: 0.12)
-        SoundManager.shared.play("punch_2")
+        SoundManager.shared.play("hero_hurt")
     }
 
     func playHeroDeath() {
@@ -301,7 +301,7 @@ class CombatScene: SKScene {
     func playHeroHeal() {
         guard isReady, !isHeroDeathPlaying, !heroHealFrames.isEmpty else { return }
         heroOneShot(heroHealFrames, fps: 0.12)
-        SoundManager.shared.play("heart_collect")
+        SoundManager.shared.play("heal")
     }
 
     private func heroOneShot(_ frames: [SKTexture], fps: TimeInterval) {
@@ -342,7 +342,7 @@ class CombatScene: SKScene {
             .run { [weak self] in
                 guard let self, self.enemyGeneration == gen, !self.isEnemyDeathPlaying else { return }
                 self.enemyOneShot(self.enemyHurtFrames, fps: 0.12)
-                SoundManager.shared.play("crunch_quick")
+                SoundManager.shared.play("enemy_hit")
             }
         ]))
     }
@@ -357,7 +357,7 @@ class CombatScene: SKScene {
                 guard let self, self.enemyGeneration == gen else { return }
                 self.enemyNode.removeAction(forKey: "anim")
                 self.enemyNode.run(.animate(with: self.enemyDeathFrames, timePerFrame: 0.15), withKey: "anim")
-                SoundManager.shared.play("crunch_quick")
+                SoundManager.shared.play("enemy_death")
             }
         ]))
     }
@@ -479,7 +479,7 @@ class CombatScene: SKScene {
         let spawn = SKAction.run { [weak self] in
             self?.floatText("+\(amount)g", at: CGPoint(x: 150, y: 61),
                             color: UIColor(red: 0.95, green: 0.82, blue: 0.10, alpha: 1))
-            SoundManager.shared.play("coin_collect")
+            SoundManager.shared.play("gold_tick")
         }
         run(.sequence([wait, spawn]))
     }

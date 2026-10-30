@@ -231,6 +231,7 @@ struct GameView: View {
             }
             game.onHeroCrit = { dmg in
                 combatScene.showMonsterCritDamage(dmg)
+                SoundManager.shared.play("crit")
                 Haptics.impact(.heavy)
                 shakeTrigger += 1
             }
@@ -238,13 +239,22 @@ struct GameView: View {
                 combatScene.showHeroHeal(amt)
                 combatScene.playHeroHeal()
             }
-            game.onHeroDodge   = { combatScene.showDodge() }
+            game.onHeroDodge   = {
+                combatScene.showDodge()
+                SoundManager.shared.play("dodge")
+                SoundManager.shared.play("dodged")
+            }
             game.onEnemyWindup = {
                 combatScene.showTelegraph()
+                SoundManager.shared.play("heavy_windup")
                 Haptics.notify(.warning)
             }
 
-            game.onMonsterSpawn  = { enemy in combatScene.updateEnemy(enemy); combatScene.playEnemyIdle() }
+            game.onMonsterSpawn  = { enemy in
+                combatScene.updateEnemy(enemy); combatScene.playEnemyIdle()
+                // A boss walking in gets a bass hit, so the moment lands.
+                if DungeonGame.isBoss(floor: game.currentFightFloor) { SoundManager.shared.play("boss_arrives") }
+            }
             game.onMonsterHurt   = { combatScene.playEnemyHurt() }
             game.onMonsterAttack = { combatScene.playEnemyAttack() }
             game.onMonsterDeath  = { combatScene.playEnemyDeath() }
@@ -269,7 +279,8 @@ struct GameView: View {
             // The buzz scales with rarity, so a Legendary *feels* different
             // in the hand before you've even read the banner.
             guard newID != nil, let rarity = game.pendingDrop?.rarity else { return }
-            SoundManager.shared.play("item_equip")
+            // Rare and up get the sparkly sound, matching the bigger reveal.
+            SoundManager.shared.play(rarity == .common || rarity == .uncommon ? "loot" : "loot_rare")
             switch rarity {
             case .common:          Haptics.impact(.light)
             case .uncommon:        Haptics.impact(.medium)
@@ -330,6 +341,10 @@ struct GameView: View {
             if !isUp && tutorialStepRaw == TutorialStep.firstCamp.rawValue {
                 finishTutorial()
             }
+        }
+        .onChange(of: game.canUseAbility) { wasReady, isReady in
+            // A soft ping when the class ability comes off cooldown mid-fight.
+            if !wasReady && isReady && game.canTap { SoundManager.shared.play("ability_ready") }
         }
         .onChange(of: autoBattle) { _, newValue in
             game.autoBattle = newValue   // keep the model's live flag in sync with the toggle

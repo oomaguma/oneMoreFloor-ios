@@ -179,7 +179,17 @@ Raid glow-up (2026-10-29):
 - [x] **Tap-to-target**: tapping on/near an enemy focuses it (gold ring underfoot); the hero hits the focused enemy first while it's in range.
 - [x] **Rewards**: `raidShardReward` now scales with greed; a full clear also rolls boss-tier loot (`EquipmentDrop.rollBoss`), shown on the result screen in its rarity color.
 - [x] **Result screen** reads `DungeonGame.raidOutcome` (cleared / escaped / lost, shards, loot, what was lost). The raid resolves the instant it ends — Continue only dismisses — so closing the app on the result screen can't count as abandoning it.
-- [ ] Still to do: class ability + heavy-attack dodges inside raids; a mid-wave Retreat at low HP; raid trophies for a collection codex. No paid raid entries or energy systems.
+- [x] **Class ability + dodge in raids** (2026-10-30). Raids are real-time, so both got real-time versions:
+  - **Ability button** (under the hero's HP): the class's signature ability with its normal effect. Bursts are rapid strikes on the focused or nearest enemy in range (each can crit, splash and kill). Heals heal. Shield Wall cuts damage for its duration and tints the hero blue. It's ready when the raid starts and uses the hero's cooldown, including Adrenaline.
+  - **Heavies:** an enemy sometimes winds up a heavy (18%, boss 35%, same as the dungeon). It shows a pulsing red "!" and a red tint for 0.9s, then hits for 1.5×. DODGE glows red and buzzes while one is coming. Pressing it makes the hero hop back and be untouchable for 0.5s, with a 1.2s cooldown.
+  - **Why 1.5× and not the dungeon's 2×:** chosen with `Tools/raid_balance_sim.py`, now extended with heavies, dodge rate and a burst ability. Fresh Soldier, floor 11, entering at 60% HP:
+    - AUTO only: 0% → 0%.
+    - Tapping ~2/s (dodging 60%, using the ability): 52% → 88%.
+    - Tapping ~3/s: 100% → 100%.
+    - Blessings without tapping: 57% → 57% at 1.5×, versus 35% at 2×.
+  - So engaged players win far more often, and the blessing path isn't punished.
+  - Tests: `RaidTests` (damage formula, guard, ability wiring).
+- [ ] Still to do: a mid-wave Retreat at low HP; raid trophies for the codex. No paid raid entries or energy systems.
 
 **3d. Onboarding (FTUE) — ✅ done (2026-10-29)**
 - [x] The text-wall `IntroCardView` (with its stale "auto-battles on its own" copy) is gone. `Onboarding/Tutorial.swift` drives in-the-moment `CoachBubble`s through a persisted `TutorialStep` (strike → greed → atRisk → campAhead → firstCamp → done): **TAP TO STRIKE** over the STRIKE button the moment an enemy is up; **GREED RISING** under the gauge on floor 2; **GOLD AT RISK** on floor 3 (each advances on GOT IT or by reaching the next beat).
@@ -208,6 +218,20 @@ So the glow-up can be judged by numbers, not vibes. Every new PostHog event and 
 - [x] `notification_ask_shown` → `notification_ask_answered` (`granted`) shows **whether the soft ask converts**.
 - [x] `fall_share_tapped` (`source`: game_over / hall) counts **interest in the death card**. ShareLink can't report a completed share, so this counts taps that open the sheet, not sends.
 - No personal data: only game numbers and button choices. The hero name is never sent.
+
+**3e¾. Sound pass — ✅ done (2026-10-30)**
+The game had 16 sounds. The hero's swing (every ~0.9 s) alternated between 2 files, and every enemy hit and death played the same `crunch_quick`, so combat sounded looped. Crits, heavies, dodges, boss arrivals and menus had no sound at all.
+- [x] **`SoundManager` plays sound groups.** A group is several takes of one sound. It plays a random take, never the same one twice in a row, and combat groups also get a ±5% random pitch shift. Old single-file names still work.
+- [x] **New sources, each family picked by name and measured length and level (nobody has listened yet):**
+  - **Helton Yan's Pixel Combat** (`hy_*`): Sword Slash for swings, Smack for enemy hits, Gut Punch for hits on the hero, Sword Critical, Bit Bomb for deaths, Energy Riser for the heavy wind-up (0.7 s, so it builds into the 0.9 s raid wind-up), Simple Whoosh for dodges, Sword Parry for a dodged heavy, Simple Heal, Skill Ready, Magic Item and Sparkly Star for loot, and Bass Hit for bosses.
+  - **ObsydianX Interface SFX Pack 1** (`ui_*`, CC0): confirm, back and tab tones.
+  - Both mix with the old sounds: swing, enemy_hit, hero_hurt, heal and loot keep their original file as one take.
+- [x] **Processing:** `Tools/process_sounds.py` takes each file to mono, trims the trailing silence (with a 30 ms fade), peak-levels it by role (combat about −2 dB like the old hits, pings about −14 dB like the old jingles) and converts it to AAC. That's 69 files and 812 KB, against 3.8 GB of source WAVs.
+- [x] **New moments with sound:** crit, heavy wind-up, dodge, dodged heavy, ability ready, boss arrival, loot (brighter for Rare and up), tab switch, Rest/Descend/Raid confirm, and raid-briefing Back.
+- [x] **Credits** in Settings: Helton Yan, plus ObsydianX (a courtesy, since CC0 doesn't require it). **Check the Pixel Combat license terms where it was bought before shipping**; the pack came with no license file.
+- [ ] **Listen and adjust.** Every pick was made without hearing it. To swap one, change the family in `Tools/process_sounds.py`, rerun it, and keep the same output names.
+- [x] **Per-floor gold sound:** it was the 1.3 s `coin_collect` jingle on every kill, which Josh flagged as really annoying. It's now `gold_tick`, a 0.2 s Coin Zap tink with 6 takes, quiet (−16 dB) and pitch-varied. `coin_collect` is kept for quest claims.
+- [ ] Still silent: blessings and curses, and can't-afford taps.
 
 **3f. ASO**
 - [ ] New screenshots that show the greed tension (the new battle screen is the hero shot), keyword/title pass. (Partly outside the code.)

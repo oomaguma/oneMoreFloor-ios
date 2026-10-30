@@ -460,8 +460,9 @@ class DungeonGame {
     var effectiveGreedCap: Double {
         DungeonGame.greedCap + Double(prestigeUpgrades.first(where: { $0.id == "avarice" })?.level ?? 0)
     }
-    /// Adrenaline: scales ability cooldowns down (1.0 = unchanged).
-    private var abilityCooldownScale: Double {
+    /// Adrenaline: scales ability cooldowns down (1.0 = unchanged). Also
+    /// handed to RaidScene so the upgrade works in raids too.
+    var abilityCooldownScale: Double {
         1.0 - Double(prestigeUpgrades.first(where: { $0.id == "adrenaline" })?.level ?? 0) * 0.10
     }
 

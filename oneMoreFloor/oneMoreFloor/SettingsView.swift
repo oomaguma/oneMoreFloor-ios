@@ -82,6 +82,11 @@ struct SettingsView: View {
                     rowDivider()
                     creditRow(label: "Sound Effects", value: "Chequered Ink")
                     rowDivider()
+                    creditRow(label: "Combat Sounds", value: "Helton Yan")
+                    rowDivider()
+                    // CC0, so credit isn't required, but it's good manners.
+                    creditRow(label: "Interface Sounds", value: "ObsydianX")
+                    rowDivider()
                     // SIL Open Font License; the license text ships in the bundle
                     // (Theme/Fonts/PixelifySans-OFL.txt).
                     creditRow(label: "Pixel Font", value: "Pixelify Sans (OFL)")

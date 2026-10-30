@@ -186,5 +186,32 @@ struct RaidTests {
         strong.heroAtk = 40
         #expect(strong.raidDangerRatio < weak.raidDangerRatio)
     }
-}
 
+    // MARK: - Heavies, dodge, guard (raid abilities)
+
+    @Test func aHeavyHitsHarderThanANormalHit() {
+        let normal = RaidScene.incomingDamage(atk: 20, def: 2, heavy: false, guardReduction: 0)
+        let heavy  = RaidScene.incomingDamage(atk: 20, def: 2, heavy: true,  guardReduction: 0)
+        #expect(normal == 18)
+        #expect(heavy  == 28)                    // 20 × 1.5 = 30, minus 2 DEF
+    }
+
+    @Test func aGuardCutsIncomingDamage() {
+        // Shield Wall: 70% reduction after DEF.
+        let guarded = RaidScene.incomingDamage(atk: 20, def: 0, heavy: true, guardReduction: 0.7)
+        #expect(guarded == 9)                    // 30 × 0.3
+    }
+
+    @Test func everyHitDealsAtLeastOne() {
+        #expect(RaidScene.incomingDamage(atk: 1, def: 50, heavy: true, guardReduction: 0.9) == 1)
+    }
+
+    @Test func theRaidUsesTheHerosOwnAbilityAndCooldown() {
+        let soldier = CharacterClass.all[0]
+        let scene = RaidScene(hero: soldier, heroHp: 100, heroMaxHp: 100, heroAtk: 10, heroDef: 1,
+                              zoneID: "crypts", floor: 11, critChance: 0, abilityCooldown: 9)
+        #expect(scene.ability.name == soldier.signatureAbility.name)
+        #expect(scene.isAbilityReady)            // ready the moment the raid starts
+        #expect(scene.canDodge)
+    }
+}
