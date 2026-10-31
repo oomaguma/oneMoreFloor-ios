@@ -1,4 +1,0 @@
-module PHPLCrashReporter {
-  header "../../../vendor/PHPLCrashReporter/Source/CrashReporter.h"
-  export *
-}

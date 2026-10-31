@@ -1,4 +1,0 @@
-module phlibwebp {
-  umbrella "../../../vendor/libwebp"
-  export *
-}

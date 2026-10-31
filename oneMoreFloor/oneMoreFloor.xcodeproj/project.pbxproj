@@ -239,7 +239,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				42D121552FBF633C00A022F9 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
-				42D9C41D2FCF361E00DB3CBD /* XCLocalSwiftPackageReference "../posthog-ios-3.59.2" */,
+				42D9C41D2FCF361E00DB3CBD /* XCRemoteSwiftPackageReference "posthog-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 42D11E9E2FBE13D900A022F9 /* Products */;
@@ -647,13 +647,6 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		42D9C41D2FCF361E00DB3CBD /* XCLocalSwiftPackageReference "../posthog-ios-3.59.2" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "../posthog-ios-3.59.2";
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCRemoteSwiftPackageReference section */
 		42D121552FBF633C00A022F9 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -661,6 +654,14 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 13.4.0;
+			};
+		};
+		42D9C41D2FCF361E00DB3CBD /* XCRemoteSwiftPackageReference "posthog-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/PostHog/posthog-ios.git";
+			requirement = {
+				kind = exactVersion;
+				version = 3.59.2;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -673,6 +674,7 @@
 		};
 		42D9C41E2FCF361E00DB3CBD /* PostHog */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = 42D9C41D2FCF361E00DB3CBD /* XCRemoteSwiftPackageReference "posthog-ios" */;
 			productName = PostHog;
 		};
 /* End XCSwiftPackageProductDependency section */
