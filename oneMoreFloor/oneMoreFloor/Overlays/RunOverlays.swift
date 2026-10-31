@@ -328,7 +328,10 @@ struct BossVictoryOverlay: View {
                     .background(Color.white.opacity(0.12))
                     .padding(.bottom, 16)
 
-                Text(victory.zoneIcon + "  " + victory.zoneName.uppercased())
+                // zoneIcon is an SF Symbol name, so it has to go through
+                // Image(systemName:) — gluing it into the string prints the
+                // raw name ("door.left.hand.open") instead of the icon.
+                Text("\(Image(systemName: victory.zoneIcon))  \(victory.zoneName.uppercased())")
                     .font(Theme.Fonts.label(15))
                     .foregroundStyle(.white)
 
