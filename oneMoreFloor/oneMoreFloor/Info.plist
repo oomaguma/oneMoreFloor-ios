@@ -32,7 +32,5 @@
 		<key>UIColorName</key>
 		<string>Black</string>
 	</dict>
-	<key>UIRequiresFullScreen</key>
-	<true/>
 </dict>
 </plist>
