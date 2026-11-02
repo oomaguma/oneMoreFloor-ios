@@ -480,8 +480,12 @@ struct RaidView: View {
     }
 
     /// The boss-tier drop from a full clear, framed in its rarity color.
+    /// It also says where the item went: a drop that beats what you're wearing
+    /// is auto-equipped into its slot, so it never shows up in the bag list.
+    /// Without this tag, that looked like the loot had vanished.
     private func lootCard(_ item: Equipment) -> some View {
-        HStack(spacing: 12) {
+        let wasEquipped = game.equippedItems[item.slot.rawValue]?.id == item.id
+        return HStack(spacing: 12) {
             ItemIconView(item: item, size: 44)
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.name)
@@ -492,6 +496,14 @@ struct RaidView: View {
                     .foregroundStyle(item.rarity.uiColor)
             }
             Spacer(minLength: 0)
+            // Same tag as the loot reveal banner, so the two always agree.
+            VStack(spacing: 2) {
+                Image(systemName: wasEquipped ? "checkmark.shield.fill" : "bag.fill")
+                    .font(.system(size: 15, weight: .bold))
+                Text(wasEquipped ? "EQUIPPED" : "TO BAG")
+                    .font(Theme.Fonts.label(9))
+            }
+            .foregroundStyle(wasEquipped ? Theme.Palette.life : Theme.Palette.dust)
         }
         .padding(12)
         .gamePanel(tint: item.rarity.uiColor.opacity(0.8), cornerRadius: 14)

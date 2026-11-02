@@ -164,6 +164,17 @@ struct RaidTests {
         #expect(game.isRaidScreenUp == false)
     }
 
+    @Test func raidLootLandsInYourGear() throws {
+        // The loot on the result screen must really be yours afterwards:
+        // either worn (auto-equipped into its slot) or waiting in the bag.
+        let game = gameInRaid(floor: 30)
+        game.completeRaid(success: true, heroHpAfterRaid: game.heroHp)
+        let loot = try #require(game.raidOutcome?.loot)
+        let worn  = game.equippedItems[loot.slot.rawValue]?.id == loot.id
+        let inBag = game.inventory.contains { $0.id == loot.id }
+        #expect(worn || inBag)
+    }
+
     @Test func lossOutcomeListsWhatWasLost() {
         let game = gameInRaid(floor: 10)
         game.atRiskGold = 70
