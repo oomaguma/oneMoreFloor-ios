@@ -213,7 +213,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2650;
-				LastUpgradeCheck = 2650;
+				LastUpgradeCheck = 2710;
 				TargetAttributes = {
 					42D11E9C2FBE13D900A022F9 = {
 						CreatedOnToolsVersion = 26.5;
@@ -239,7 +239,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				42D121552FBF633C00A022F9 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
-				42D9C41D2FCF361E00DB3CBD /* XCLocalSwiftPackageReference "../posthog-ios-3.59.2" */,
+				42D9C41D2FCF361E00DB3CBD /* XCRemoteSwiftPackageReference "posthog-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 42D11E9E2FBE13D900A022F9 /* Products */;
@@ -333,6 +333,7 @@
 				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Used to show you relevant ads and measure their effectiveness.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
@@ -340,7 +341,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = jmyers.oneMoreFloor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -374,6 +375,7 @@
 				INFOPLIST_KEY_NSUserTrackingUsageDescription = "Used to show you relevant ads and measure their effectiveness.";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
+				INFOPLIST_KEY_UIRequiresFullScreen = YES;
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
@@ -381,7 +383,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.2.0;
+				MARKETING_VERSION = 2.0.0;
 				PRODUCT_BUNDLE_IDENTIFIER = jmyers.oneMoreFloor;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -456,8 +458,9 @@
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
-				ONLY_ACTIVE_ARCH = NO;
+				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -517,6 +520,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -540,7 +544,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/letsMakeAGame.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/letsMakeAGame";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/oneMoreFloor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/oneMoreFloor";
 			};
 			name = Debug;
 		};
@@ -562,7 +566,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/letsMakeAGame.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/letsMakeAGame";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/oneMoreFloor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/oneMoreFloor";
 			};
 			name = Release;
 		};
@@ -582,7 +586,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = letsMakeAGame;
+				TEST_TARGET_NAME = oneMoreFloor;
 			};
 			name = Debug;
 		};
@@ -602,7 +606,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = letsMakeAGame;
+				TEST_TARGET_NAME = oneMoreFloor;
 			};
 			name = Release;
 		};
@@ -647,13 +651,6 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		42D9C41D2FCF361E00DB3CBD /* XCLocalSwiftPackageReference "../posthog-ios-3.59.2" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "../posthog-ios-3.59.2";
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCRemoteSwiftPackageReference section */
 		42D121552FBF633C00A022F9 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -661,6 +658,14 @@
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 13.4.0;
+			};
+		};
+		42D9C41D2FCF361E00DB3CBD /* XCRemoteSwiftPackageReference "posthog-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/PostHog/posthog-ios.git";
+			requirement = {
+				kind = exactVersion;
+				version = 3.59.2;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -673,6 +678,7 @@
 		};
 		42D9C41E2FCF361E00DB3CBD /* PostHog */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = 42D9C41D2FCF361E00DB3CBD /* XCRemoteSwiftPackageReference "posthog-ios" */;
 			productName = PostHog;
 		};
 /* End XCSwiftPackageProductDependency section */

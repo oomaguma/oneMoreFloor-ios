@@ -54,6 +54,35 @@ struct ActiveEffect: Codable, Identifiable, Equatable {
     }
 }
 
+// MARK: - Blessing Combat Math
+//
+// The three "special" blessings — War Surge (splash), Thorn Mantle (thorns),
+// and Blood Rush (heal on kill) — work in both the dungeon and raids. Their
+// formulas live here, once, so the two combat paths can't drift apart (the
+// same duplicated-logic problem OVERHAUL.md describes for combat formulas).
+// Pure functions with no game state, so they're easy to unit-test.
+
+enum BlessingCombat {
+    /// War Surge: damage the splash deals to a second enemy (0 when inactive).
+    static func splashDamage(strike: Int, fraction: Double) -> Int {
+        guard fraction > 0, strike > 0 else { return 0 }
+        return max(1, Int(Double(strike) * fraction))
+    }
+
+    /// Thorn Mantle: damage reflected onto the attacker (0 when inactive).
+    /// Capped so thorns never land the killing blow — the attacker stays at ≥1 HP.
+    static func thornsReflect(incoming: Int, fraction: Double, attackerHp: Int) -> Int {
+        guard fraction > 0, attackerHp > 1 else { return 0 }
+        return min(attackerHp - 1, max(1, Int(Double(incoming) * fraction)))
+    }
+
+    /// Blood Rush: HP restored per kill (0 when inactive).
+    static func killHeal(maxHp: Int, fraction: Double) -> Int {
+        guard fraction > 0 else { return 0 }
+        return max(1, Int(Double(maxHp) * fraction))
+    }
+}
+
 // MARK: - Usable Item
 
 enum UsableItemKind: String, Codable {

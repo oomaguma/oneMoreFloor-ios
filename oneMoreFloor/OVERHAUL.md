@@ -1,6 +1,6 @@
 # oneMoreFloor — The Overhaul
 
-**Status:** Phases 1 & 2 complete & compiling clean (2026-06-22), under active playtest/tuning. Phase 3 (UI overhaul + onboarding + ASO) and Phase 4 (monetization) not started; some Phase 4 rewarded-ad placements landed early.
+**Status:** Phases 1 & 2 complete & compiling clean (2026-06-22), under active playtest/tuning. Phase 3 (UI overhaul) in progress on `feature/glow-up` (2026-10-29): design system, battle screen, and every main screen/overlay restyled; Settings, Store, raid, onboarding and retention loops are done (see 3c–3e); ASO is still to do. Phase 4 (monetization) not started; some Phase 4 rewarded-ad placements landed early.
 **Goal:** Turn a passive idle game into the push-your-luck climber its title promises.
 
 This is the living design + build spec for the overhaul. It is the source of truth — keep it current as we build. When a mechanic changes in code, change it here too.
@@ -104,10 +104,154 @@ The smallest change that fixes the dead first session. Ship it, watch D1/D7 move
 
 **Idle fallback — tried, then removed (2026-06-22):** an idle fallback briefly auto-took turns after 3s of no tap so the screen wouldn't freeze. But it fired regardless of the Auto toggle, so turning Auto *off* still auto-battled — confusing. Removed: the **Auto toggle is now the sole auto-battle control** (off = pure manual, waits for taps; on = hands-off). Idle progress comes from turning Auto on, or backgrounding the app (offline sim). Lesson: one explicit control beats an implicit one that contradicts it.
 
-### Phase 3 — UI overhaul + onboarding + the App Store listing
-- Full visual polish pass on every screen.
-- A first-session tutorial that teaches tap + the push-your-luck choice in <60s.
-- ASO: new icon, screenshots that show the greed tension, keyword/title optimization. (Partly outside the code.)
+### Phase 3 — UI overhaul ("the glow-up") + onboarding + the App Store listing
+
+**Diagnosis (2026-10-29):** the systems were good but the game was *dressed like a settings screen*: five equal-weight bordered cards stacked vertically, monospaced system font everywhere, the (good) pixel art squeezed into a 230pt letterbox, a fifth of the screen spent on an empty strike pad, and greed — the game's identity — shown as a 7pt progress bar.
+
+**Principles:**
+- **The dungeon is the screen.** Art runs full-bleed; UI floats over it.
+- **One design system.** All color/type/panels/buttons/bars come from `Theme/Theme.swift`. No new raw `Color(red:…)` or `.monospaced` in views.
+- **Feel it, don't read it.** Greed heats the screen; hits shake and freeze; the pot bounces.
+- **Thumb zone rule still holds:** bottom = intended actions only (ability + STRIKE). REST moved to the *top* so mashing can't bank by accident.
+- **Healthy loops only:** no guilt streaks, fake-scarcity timers, or selling greed / at-risk gold for real money.
+
+**3a. Foundation — ✅ done**
+- [x] Split the 3,645-line `ContentView.swift` into per-screen files: `Screens/`, `Battle/`, `Overlays/`, `HUD/`, `Navigation/`, `Tabs/` (Xcode synchronized folders pick them up automatically). Code moved verbatim; only `GameTab` / `CustomGameTabBar` lost `private`.
+- [x] `Theme/Theme.swift`: warm torch-lit palette, `Theme.greedColor(_:)` heat ramp, rounded heavy display type + `.gameShadow()` (hard pixel drop shadow), `.gamePanel()` bevelled stone panels, `ChunkyButtonStyle` (3D press-down buttons), `GameBar` (glossy meter with a lagging "ghost" damage trail).
+
+**3b. Battle screen — ✅ done (needs playtest)**
+- [x] Full-bleed arena: `CombatScene` now uses `.resizeFill` + a `world` container (design space 200 wide, scaled to the view width) with the zone backdrop filling the view and its floor band under the fighters' feet. Fixes the crop/zoom a tall view caused with the old `.aspectFill`.
+- [x] Floating HUD: `BattleHeaderView` (floor, zone, **personal-best marker** "BEST 14 · 2 to go" / "NEW BEST" once your record is floor 5+), `GreedGaugeView` (flame + heat-colored multiplier + at-risk pot + REST), `VersusBarsView` (fighting-game HP bars draining toward the center).
+- [x] Tap-anywhere-to-strike on the open dungeon, plus a chunky STRIKE button beside a square ability button with a draining cooldown shade. Heavy telegraph splits STRIKE into DODGE / STRIKE and disables tap-anywhere (the choice must be deliberate) with a pulsing `HeavyWarningView`.
+- [x] Juice: greed heat vignette + embers scale with greed; screen shake on crits/death; red edge flash on hero hurt; crit hit-stop (`CombatScene.hitStop`); outlined heavy damage numbers; pot bounce.
+
+**3c. Screen restyles**
+- [x] Title buttons → chunky (gold primary).
+- [x] Tab bar → stone/gold theme with glowing selected icon.
+- [x] Upgrades → icon tiles per stat, level badges, gold chunky buy buttons.
+- [x] Rest site card → pot as the headline number, chunky DESCEND / REST / RAID.
+- [x] Game over → "YOU FELL / on floor N", pot as headline, chunky Second Wind / Restart.
+- [x] **Token migration (pass 2):** every monospaced system font in the app → `Theme.Fonts`; cold blue-grey fills → stone palette (incl. Settings, Store, Raid).
+- [x] Character select → atmospheric backdrop, role-colored pedestal glow per hero, equal-height cards.
+- [x] Overlays (offline summary, boss victory, zone unlock, item/blessing banners) → `.gamePanel`, chunky buttons, palette tokens.
+- [x] Items → gear row pinned to natural height (was ballooning to ~340pt), ghosted gear-art empty slots (the weapon slot's SF Symbol "sword" doesn't exist, so it showed nothing), chunky sell/optimize.
+- [x] Quests → display header, themed gold/green progress bars. Prestige → chunky PRESTIGE / RETIRE.
+- [x] Floor-event cards → centered glowing icon, category tag, display title, shrine cost line ("Costs 40 · you have 52", red when short), chunky choice buttons. The curse category is labelled **GAMBLE** (they're optional 50/50s, not something that already happened).
+- [x] Quests → claimable first / claimed last, icon tile per quest type, gold progress bars, pulsing chunky CLAIM; Daily Champion moved to the top as a bonus card. Fixed: its progress bar always drew full — now claimed / total.
+- [x] **Hand-polish (2026-10-30):**
+  - Settings and Store dropped their stock navigation bars for a display-font title and `.gamePanel` cards. Settings rows have tinted icon tiles and gold toggles.
+  - The Store leads with an honest "Support the game" header, tints each card per product, uses chunky gold price buttons and an OWNED badge, and has a close button.
+  - Zone icons moved from Unicode glyphs (▪ ✦ ◆…, which drew a stray black square beside "Entrance") to SF Symbols.
+  - `MapView` was dead code (never shown anywhere) and was deleted rather than restyled.
+- [x] PRESTIGE now asks for confirmation (it resets the run; Retire already did).
+- [x] **Dailies cut from 12 to 3** (2026-10-29): one easy, one medium, one stretch per day (`DungeonGame.questTiers`), chosen deterministically from the date with no repeated quest type. Multi-hour goals (350 kills, 12 bosses, 2,000 gold, floor 40+) were removed from the daily pool. Daily Champion is now "claim all 3" (still 20 ◈). Covered by `oneMoreFloorTests/DailyQuestTests.swift` across every day of 2026. Note: on update day, players mid-day see their list change once (old ids drop out).
+- [x] **Pixel font** (2026-10-30): Pixelify Sans (SIL OFL; `Theme/Fonts/`, registered in `UIAppFonts`, license text bundled, credited in Settings) now drives `Theme.Fonts.display` and `.number`: headings, buttons, names and every big number. `label` / `body` stay rounded system text for readability. `Theme.pixelFontScale` (1.12) makes up for the pixel font looking smaller, so existing layouts kept their weight. Some secondary buttons use `label` and so stay rounded (e.g. WATCH AD next to a pixel CONTINUE); switch them to `display` case by case if the mix bothers you.
+- [x] **Merged Upgrades + Items into one HERO tab** (2026-10-30, `Tabs/HeroTab.swift`): an UPGRADES / GEAR picker over the existing pages, remembered between visits. The tab bar is down to four tabs: HERO · BATTLE · PRESTIGE · QUESTS. The pages lost their own titles, since the picker names them. The Codex button now sits on the GEAR page.
+- [ ] Hide Prestige until it unlocks: deliberately not done yet. The Prestige tab also holds the Hall of the Fallen and is where raid shards are spent, so hiding it needs a rule that covers those too.
+
+**3c-raid. Raid glow-up**
+
+Diagnosis (2026-10-29): the raid is the game's most interesting gamble on paper (stake blessings + the pot for soul shards) but plays as a short auto-fight — taps are just extra auto-attacks, the class ability / dodge / boss gimmicks are absent, the arena is a 300×160 letterbox, and the rest card says "Win ◈ shards" with no number, so it's a blind bet.
+
+Bugs — ✅ fixed (unit-tested in `oneMoreFloorTests/RaidTests.swift`):
+- [x] Reward mismatch: the result screen showed `max(1, floor/5)` shards but `completeRaid` paid `max(5, floor/3)`. Now both read `DungeonGame.raidShardReward`.
+- [x] A win silently restored pre-raid HP (raid damage lived only in `RaidScene`). `completeRaid(success:heroHpAfterRaid:)` now carries it back, clamped to 1…max.
+- [x] Blessing special effects were ignored in raids — War Surge (splash, labelled "raid only") did nothing anywhere. `RaidScene` now applies War Surge splash, Thorn Mantle reflection, and Blood Rush kill-heals with the dungeon's formulas.
+- [x] Raid crits used the class base chance; now `game.heroCritChance` (includes the legacy bonus).
+- [x] Blessing formulas now live once in `BlessingCombat` (FloorEvents.swift), shared by dungeon and raid combat, with unit tests in `oneMoreFloorTests/BlessingCombatTests.swift` (incl. War Surge target selection via `RaidScene.splashTarget`).
+- [x] Seen in the simulator via the new DEBUG launch arguments (`Debug/DebugLaunch.swift`: `-debugRaid <floor>`, `-debugBlessings YES`): War Surge splash numbers visibly land on a second enemy.
+
+Raid playtest findings (2026-10-29, fresh Soldier, no upgrades, floor 10, full HP):
+- **Raids are close to unwinnable at their first opportunity.** No blessings: died mid-wave 1. All three special blessings: died early in wave 2. Raid enemies used full single-fight scaling but arrive 3–5 at a time. Blessings help (+1 wave), so the earlier worry that they'd make raids "easy" doesn't hold at this depth.
+- [x] **Raid tuning — first draft shipped.** Knobs are static constants at the top of `RaidScene` (unit-tested in `RaidTests`): enemies get **45% HP / 55% ATK** of a normal floor enemy, waves are **2-3-4** (was 3-4-5), and the breather between waves heals **15%** of max HP. Chosen with `Tools/raid_balance_sim.py` (Monte Carlo of the scene's timings, calibrated against two real runs). The first real raid is floor 11 (Crypts), right after the floor-10 boss. Fresh Soldier there:
+
+  - Entering at full HP: AUTO only 0% · tapping ~2/s 96% · tapping ~3/s 100% · AUTO + all three blessings 87%.
+  - Entering at 60% HP: AUTO only 0% · tapping ~2/s 52% · tapping ~3/s 100% · AUTO + all three blessings 57%.
+
+  Before tuning, every column was 0%. Design intent: idling loses, skill wins, and staking blessings pays off. Verified in the simulator: AUTO-only now dies in wave 3 (was wave 1). Open question: the jump from ~1 to ~2 taps/s is a steep cliff — revisit once the tap-to-target / ability ideas land.
+- [x] **Quit-to-escape exploits — fixed.** (1) `isRaidActive` / `pendingRestSite` weren't saved, so force-quitting a losing raid kept the pot and blessings. (2) Backgrounding 10s+ mid-raid ran the offline "make camp" sim, which banked the pot. Now both are saved (SaveData v10); a fresh launch with a saved raid resolves it as a loss and shows a "Raid abandoned" alert listing what was lost; a merely-backgrounded raid keeps running and skips the offline sim; a pending rest-site choice reappears after relaunch. Tested in `oneMoreFloorTests/SaveStateTests.swift` and verified in the simulator.
+- [x] The failure screen now lists only what was actually lost (it used to claim "All blessings lost" with none).
+
+Raid glow-up (2026-10-29):
+- [x] **Raid briefing** (`RaidBriefingView` in DecisionCards.swift): the rest card's RAID… button opens it first — zone, wave layout (2 / 3 / 3+boss), prize (+N ◈ + boss-tier loot, escape payouts), what's at stake (blessing icons + pot), and a DANGER read (`DungeonGame.raidDanger`, a closed-form estimate on auto-attack) with a hint that matches the rating. BEGIN RAID or BACK.
+- [x] **Cash out between waves**: after waves 1 and 2 the scene pauses (`RaidScene.onWaveCleared` / `continueToNextWave()`); ESCAPE pays `raidEscapeShare` (25% / 50% of the full reward) and keeps blessings + pot (`DungeonGame.escapeRaid`), PRESS ON risks both for the full prize.
+- [x] **Visual pass**: `RaidScene` uses the same `resizeFill` + `world` layout as CombatScene (enemies walk in from off-screen); `RaidView` runs it full-bleed via the shared `ArenaSceneView`, with wave pips (crown = boss wave), a stakes row, a hero HP panel, "WAVE n" / "BOSS WAVE" banners, shake on crits and the boss wave, red hurt flash, outlined damage numbers, crit hit-stop, chunkier enemy HP bars.
+- [x] **Tap-to-target**: tapping on/near an enemy focuses it (gold ring underfoot); the hero hits the focused enemy first while it's in range.
+- [x] **Rewards**: `raidShardReward` now scales with greed; a full clear also rolls boss-tier loot (`EquipmentDrop.rollBoss`), shown on the result screen in its rarity color.
+- [x] **Result screen** reads `DungeonGame.raidOutcome` (cleared / escaped / lost, shards, loot, what was lost). The raid resolves the instant it ends — Continue only dismisses — so closing the app on the result screen can't count as abandoning it.
+- [x] **Class ability + dodge in raids** (2026-10-30). Raids are real-time, so both got real-time versions:
+  - **Ability button** (under the hero's HP): the class's signature ability with its normal effect. Bursts are rapid strikes on the focused or nearest enemy in range (each can crit, splash and kill). Heals heal. Shield Wall cuts damage for its duration and tints the hero blue. It's ready when the raid starts and uses the hero's cooldown, including Adrenaline.
+  - **Heavies:** an enemy sometimes winds up a heavy (18%, boss 35%, same as the dungeon). It shows a pulsing red "!" and a red tint for 0.9s, then hits for 1.5×. DODGE glows red and buzzes while one is coming. Pressing it makes the hero hop back and be untouchable for 0.5s, with a 1.2s cooldown.
+  - **Why 1.5× and not the dungeon's 2×:** chosen with `Tools/raid_balance_sim.py`, now extended with heavies, dodge rate and a burst ability. Fresh Soldier, floor 11, entering at 60% HP:
+    - AUTO only: 0% → 0%.
+    - Tapping ~2/s (dodging 60%, using the ability): 52% → 88%.
+    - Tapping ~3/s: 100% → 100%.
+    - Blessings without tapping: 57% → 57% at 1.5×, versus 35% at 2×.
+  - So engaged players win far more often, and the blessing path isn't punished.
+  - Tests: `RaidTests` (damage formula, guard, ability wiring).
+- [ ] Still to do: a mid-wave Retreat at low HP; raid trophies for the codex. No paid raid entries or energy systems.
+
+**3d. Onboarding (FTUE) — ✅ done (2026-10-29)**
+- [x] The text-wall `IntroCardView` (with its stale "auto-battles on its own" copy) is gone. `Onboarding/Tutorial.swift` drives in-the-moment `CoachBubble`s through a persisted `TutorialStep` (strike → greed → atRisk → campAhead → firstCamp → done): **TAP TO STRIKE** over the STRIKE button the moment an enemy is up; **GREED RISING** under the gauge on floor 2; **GOLD AT RISK** on floor 3 (each advances on GOT IT or by reaching the next beat).
+- [x] Scripted first run: a guaranteed boss-tier drop on floor 3 (`DungeonGame.grantTutorialDrop`) and an early camp on floor 5 with a one-line explainer of Rest vs Descend (raid + ad buttons hidden). No random floor events until the tutorial is done (one fired on floor 2 on top of the greed hint in testing).
+- [x] The first enemy spawns immediately on entering the battle screen (`immediateSpawn` in onAppear) — a fresh run used to open on ~4s of "…".
+- [x] UMP consent + ATT (was at launch in `GameViewController`) now wait for the tutorial's first camp (`.tutorialFinished`). Returning players (tutorial done, or saw the old intro) are unaffected. Verified on a clean install: zero prompts until after the first REST.
+- [x] Notification permission (was at launch in `AppDelegate`) moved to where it obviously helps: the "while you were away" summary after the hero **died while the player was away**. A soft ask ("Want a heads-up next time your hero falls?" + NOTIFY ME) appears only while iOS has never asked (`NotificationManager.canAskForPermission()`); the real iOS dialog only on NOTIFY ME, so a "no" to us doesn't burn the one-time system prompt. Players who never die offline are never asked (Settings has the toggle). Verified both paths in the simulator. DEBUG: `-debugOfflineDeath YES` fakes the summary.
+- [x] Death notification softened from "Your hero has fallen!" to "<Hero> fell in the dungeon — banked gold and upgrades are safe" (engagement chart: no guilt mechanics).
+- [x] `Analytics.tutorialCompleted()` → PostHog `tutorial_completed`; compare with `character_selected` for the funnel.
+
+**3e. Retention loops (from the engagement-loop brainstorm)**
+- [x] **Hall of the Fallen** (2026-10-29, `Legacy/`): every run that ends in death (recorded on RESTART; a Second Wind revive doesn't count) is kept as a `FallenHero` — hero, floor, gold lost, greed, slayer, date — under its own UserDefaults key so "New Hero" doesn't wipe it (newest 50). Shown as a section in the Prestige tab (deepest fall crowned; tap for the tombstone card). The killer is saved with the run (SaveData v11 `lastSlayer`) so a relaunch still says "slain by X". Tests: `HallOfTheFallenTests`.
+- [x] **Shareable death card**: SHARE YOUR FALL on the game-over screen (and SHARE on each Hall entry) sends the tombstone as a PNG via the system share sheet, rendered only when shared (`FallenCardImage: Transferable`).
+- [x] **Bestiary + gear codex** (2026-10-30, `Legacy/Codex.swift` + `CodexViews.swift`): a CODEX button (with overall found/total) on the Hero tab's GEAR page opens two pages. **Bestiary:** every zone boss and every monster type, shown as a black silhouette with "???" until slain, then in full color with its name and kill count. Undiscovered bosses say which floor they wait on; monsters say which zones they live in. **Gear:** every gear piece with five rarity pips that fill in its rarity color as you find each version (10 pieces × 5 rarities = 50). Kills are recorded live and in the offline sim, and drops count even when auto-sold. The codex has its own UserDefaults key (it survives New Hero) and is written in `save()`, not on every kill. Gear a player already owns counts on first load, so returning players don't start at zero. Tests: `CodexTests`.
+- [x] **Loot reveal** (2026-10-30, `ItemDropBanner` in RunOverlays.swift): every drop pops its icon out of a burst of its rarity color, a shine sweeps the card, and the headline scales with rarity (ITEM FOUND → RARE DROP! → LEGENDARY!!). Epic and Legendary add spinning rays, a stronger glow and 6s on screen instead of 4. The haptic also scales with rarity, from a light tap for Common to a success buzz for Epic and Legendary. An EQUIPPED / TO BAG tag says where the item went. It stays a non-blocking banner because drops are frequent in an idle loop. DEBUG: `-debugDrop <rarity>`.
+- [x] **Next-boss preview** (2026-10-30, `Battle/NextBossPreview.swift`): a plate under the floor counter shows the zone boss as a black silhouette (its first idle frame, trimmed to the drawing and template-filled), a countdown (BOSS IN n / BOSS NEXT FLOOR) and a one-line hint of its gimmick (`BossGimmick.teaser`). Within 3 floors it turns red and pulses; it hides on the boss floor itself. Model: `nextBossFloor`, `floorsUntilBoss`, `nextBossEnemy`, `nextBossGimmick`. Tests: `NextBossTests`.
+- [ ] Rare surprise events (mimic, golden goblin, merchant).
+- [ ] Later: daily seeded dungeon with a Game Center board.
+
+**3e½. Analytics for the new features — ✅ done (2026-10-30, `AnalyticsManager.swift`)**
+So the glow-up can be judged by numbers, not vibes. Every new PostHog event and what it answers:
+- [x] `tutorial_step` (`step`: greed / atRisk / campAhead / firstCamp) plus the existing `character_selected` → `tutorial_completed` make up the **FTUE funnel**, showing which beat loses new players. The first step (strike) is where every run starts, so `character_selected` stands in for it.
+- [x] `rest_site_choice` (`choice`: rest / descend / raid, with `floor`, `greed`, `pot` logged *before* the choice resets them) answers **is the gamble tempting?** If nearly everyone rests, descending isn't worth it.
+- [x] `raid_briefing_opened` → `raid_started` / `raid_briefing_backed_out` (with `danger`) shows **whether the danger rating scares players off**.
+- [x] `raid_ended` (`outcome`: cleared / escaped / lost, `escaped_after_wave`, `shards`, `blessings`) answers **are raids winnable, and is escaping too attractive?** A raid abandoned by quitting the app logs as `lost`.
+- [x] `notification_ask_shown` → `notification_ask_answered` (`granted`) shows **whether the soft ask converts**.
+- [x] `fall_share_tapped` (`source`: game_over / hall) counts **interest in the death card**. ShareLink can't report a completed share, so this counts taps that open the sheet, not sends.
+- No personal data: only game numbers and button choices. The hero name is never sent.
+
+**3e¾. Sound pass — ✅ done (2026-10-30)**
+The game had 16 sounds. The hero's swing (every ~0.9 s) alternated between 2 files, and every enemy hit and death played the same `crunch_quick`, so combat sounded looped. Crits, heavies, dodges, boss arrivals and menus had no sound at all.
+- [x] **`SoundManager` plays sound groups.** A group is several takes of one sound. It plays a random take, never the same one twice in a row, and combat groups also get a ±5% random pitch shift. Old single-file names still work.
+- [x] **New sources, each family picked by name and measured length and level (nobody has listened yet):**
+  - **Helton Yan's Pixel Combat** (`hy_*`): Sword Slash for swings, Smack for enemy hits, Gut Punch for hits on the hero, Sword Critical, Bit Bomb for deaths, Energy Riser for the heavy wind-up (0.7 s, so it builds into the 0.9 s raid wind-up), Simple Whoosh for dodges, Sword Parry for a dodged heavy, Simple Heal, Skill Ready, Magic Item and Sparkly Star for loot, and Bass Hit for bosses.
+  - **ObsydianX Interface SFX Pack 1** (`ui_*`, CC0): confirm, back and tab tones.
+  - Both mix with the old sounds: swing, enemy_hit, hero_hurt, heal and loot keep their original file as one take.
+- [x] **Processing:** `Tools/process_sounds.py` takes each file to mono, trims the trailing silence (with a 30 ms fade), peak-levels it by role (combat about −2 dB like the old hits, pings about −14 dB like the old jingles) and converts it to AAC. That's 69 files and 812 KB, against 3.8 GB of source WAVs.
+- [x] **New moments with sound:** crit, heavy wind-up, dodge, dodged heavy, ability ready, boss arrival, loot (brighter for Rare and up), tab switch, Rest/Descend/Raid confirm, and raid-briefing Back.
+- [x] **Credits** in Settings: Helton Yan, plus ObsydianX (a courtesy, since CC0 doesn't require it). **Check the Pixel Combat license terms where it was bought before shipping**; the pack came with no license file.
+- [ ] **Listen and adjust.** Every pick was made without hearing it. To swap one, change the family in `Tools/process_sounds.py`, rerun it, and keep the same output names.
+- [x] **Per-floor gold sound:** it was the 1.3 s `coin_collect` jingle on every kill, which Josh flagged as really annoying. It's now `gold_tick`, a 0.2 s Coin Zap tink with 6 takes, quiet (−16 dB) and pitch-varied. `coin_collect` is kept for quest claims.
+- [ ] Still silent: blessings and curses, and can't-afford taps.
+
+**3e⅞. Performance pass — ✅ done (2026-10-30)**
+Measured on a Release build in the simulator with macOS `sample` and `footprint`. The Mac was heavily loaded, so the absolute numbers run high; the before/after comparison is what counts. Confirm on a real phone with Instruments.
+- **Baseline:**
+  - Memory: 35 MB on the title screen, about 125 MB in battle, flat over time (no leak).
+  - Battle while idle: the main thread is about 93% free. The background CPU is mostly the Google Mobile Ads SDK preloading video ads.
+  - Auto combat: the main thread was about 48% busy.
+- [x] **Sound playback moved off the main thread.** `AVAudioPlayer.play()` and seeks wait on the system audio service. That cost about 1.2 s of main-thread time per 15 s of combat, made worse by the sound pass adding more sounds per hit. `SoundManager` now does all loading and playback on its own serial queue. It also only rewinds a player that's still playing.
+- [x] **No more first-hit hitch.** Building about 90 players took about 140 ms and landed on the first sword swing. AppDelegate now starts the sound system at launch, and the loading runs on the sound queue.
+- [x] **Sprite frames are cached.** `buildFrames` rendered every sheet offscreen on every enemy spawn (every floor, and every raid enemy). It now caches by sheet name and frame count, so each sheet is built once per launch. Tests: `SpriteFrameCacheTests`.
+- **After:** the same auto-combat sample shows the main thread **about 29% busy (was 48%)**. `SoundManager.play` is gone from the main thread, and the enemy-spawn cost fell from about 160 samples to 26.
+- [ ] Left alone:
+  - AVAudioPlayer's own "finished playing" callback, about 1% of the main thread. It always lands on main; AVAudioEngine would remove it.
+  - The title screen's 16 SwiftUI embers plus 3 looping animations, about 36% CPU in the simulator. They could be a single SpriteKit emitter or a `Canvas`.
+  - The ad web view's display link running while hidden (ads SDK).
+  - The offline catch-up simulation (up to 50k ticks on the main thread when the app reopens), which hasn't been timed yet.
+  - Running the unit tests on a simulator wipes that simulator's game save (`clearSave()` in the save tests). The tests should get their own UserDefaults suite.
+
+**3f. ASO**
+- [ ] New screenshots that show the greed tension (the new battle screen is the hero shot), keyword/title pass. (Partly outside the code.)
 
 ### Phase 4 — Monetization rework
 Mostly waits until retention is proven. **Principle: rewarded / opt-in only — no forced interstitials, which would worsen the very retention we're fixing.**
@@ -128,7 +272,7 @@ Still to do:
 ### Files in play
 - `DungeonGame.swift` — the model. All combat/economy/state changes live here.
 - `CombatScene` (`SoldierAnimationScene.swift`) — callback-driven; add the tap target + tap juice.
-- `ContentView.swift` — `GameView` owns the loop (`.task` calling `tick()`) and the battle UI.
+- `Screens/GameView.swift` — `GameView` owns the loop (`.task` calling `tick()`), wires combat callbacks, hosts overlays. The battle UI lives in `Battle/BattleViews.swift`; shared styling in `Theme/Theme.swift`.
 
 ### The duplicated-combat-logic problem (fix in 1a)
 Combat rules are currently written **three times**: `doCombatTick()` (live), `simulateOffline()` (offline), and `estimatedSecondsUntilFirstDeath()` (death-notification timing). Any combat change must touch all three or they silently drift. Phase 1a extracts the shared *formulas* (enemy scaling, gold reward) into single helpers so the rules live in one place. We deliberately do **not** merge the whole loop — the offline sim is intentionally headless/simplified (no callbacks, no crit) for speed. We only de-duplicate the formulas, not the orchestration. (Keep it simple — no over-engineering.)

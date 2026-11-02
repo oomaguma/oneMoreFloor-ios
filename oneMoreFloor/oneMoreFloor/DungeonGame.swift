@@ -57,6 +57,8 @@ struct Zone: Identifiable {
     let id: String
     let name: String
     let shortName: String
+    /// An SF Symbol name. (These used to be Unicode glyphs like ▪ and ◆, which
+    /// rendered as a stray black square next to the zone name on some screens.)
     let icon: String
     let minFloor: Int
     let maxFloor: Int?
@@ -123,6 +125,17 @@ enum BossGimmick: String {
     case enrage    // hits harder once its HP drops low
     case shield    // periodically blunts the hero's strikes
     case lifesteal // periodically regenerates HP
+
+    /// A one-line hint for the next-boss preview — enough to plan around,
+    /// without spoiling who's waiting at the bottom of the zone.
+    var teaser: String {
+        switch self {
+        case .none:      return "Something big waits below"
+        case .enrage:    return "Grows furious when wounded"
+        case .shield:    return "Shields itself from blows"
+        case .lifesteal: return "Drinks life to heal"
+        }
+    }
 }
 
 @Observable
@@ -162,6 +175,14 @@ class DungeonGame {
     // Set true when the player launches a Raid from a rest site. Pauses the
     // dungeon tick loop while RaidView runs the multi-enemy side combat.
     var isRaidActive: Bool = false
+
+    /// Set when a raid was abandoned by closing the app; GameView shows a one-time
+    /// alert explaining the loss, then clears it.
+    struct AbandonedRaid: Equatable {
+        let blessingsLost: Int
+        let goldLost: Int
+    }
+    var abandonedRaid: AbandonedRaid?
 
     // Auto-battle: when on, the game loop takes a turn for the player each tick
     // (hands-off grinding). Mirrored from the UI's @AppStorage toggle so the
@@ -233,6 +254,25 @@ class DungeonGame {
 
     private(set) var retiredCharacterIDs: [String] = []
     private(set) var totalPrestiges: Int = 0
+
+    // MARK: - Hall of the Fallen
+    /// Every run that ended in death, newest first (see Legacy/HallOfTheFallen.swift).
+    private(set) var fallenHeroes: [FallenHero] = HallOfTheFallen.load()
+    /// The bestiary + gear codex. Survives New Hero; saved alongside the run
+    /// in `save()` (not on every kill — the offline sim can rack up hundreds).
+    private(set) var codex: Codex = Codex.load()
+    /// The enemy that killed the hero in the foreground; nil after an offline death.
+    private var lastSlayer: String?
+
+    /// The memorial entry this death *would* become — shown on the game-over
+    /// screen (and its share card) before the player accepts it with RESTART.
+    var currentFall: FallenHero? {
+        guard isGameOver else { return nil }
+        let anchored = Int(Double(atRiskGold) * soulAnchorFraction)
+        return FallenHero(heroName: character.name, characterID: characterID,
+                          floor: currentFloor, goldLost: atRiskGold - anchored,
+                          greed: greedMultiplier, slainBy: lastSlayer, date: .now)
+    }
 
     var legacyHpBonus: Int {
         retiredCharacterIDs.reduce(0) { sum, id in sum + (CharacterClass.all.first { c in c.id == id }?.legacyBonus.hp ?? 0) }
@@ -337,13 +377,13 @@ class DungeonGame {
     // MARK: - Zone / enemy data
 
     static let zones: [Zone] = [
-        Zone(id: "entrance", name: "Dungeon Entrance", shortName: "Entrance",  icon: "▪", minFloor: 1,  maxFloor: 10),
-        Zone(id: "crypts",   name: "The Crypts",       shortName: "Crypts",    icon: "✦", minFloor: 11, maxFloor: 20),
-        Zone(id: "orc",      name: "Orc Stronghold",   shortName: "Orc Fort",  icon: "◆", minFloor: 21, maxFloor: 30),
-        Zone(id: "sunken",   name: "Sunken City",       shortName: "Sunken",    icon: "≈", minFloor: 31, maxFloor: 40),
-        Zone(id: "abyss",    name: "The Abyss",         shortName: "Abyss",     icon: "▼", minFloor: 41, maxFloor: 50),
-        Zone(id: "citadel",  name: "Iron Citadel",      shortName: "Citadel",   icon: "△", minFloor: 51, maxFloor: 60),
-        Zone(id: "hellgate", name: "Hell's Gate",       shortName: "Hell Gate", icon: "∞", minFloor: 61, maxFloor: nil),
+        Zone(id: "entrance", name: "Dungeon Entrance", shortName: "Entrance",  icon: "door.left.hand.open", minFloor: 1,  maxFloor: 10),
+        Zone(id: "crypts",   name: "The Crypts",       shortName: "Crypts",    icon: "cross.fill", minFloor: 11, maxFloor: 20),
+        Zone(id: "orc",      name: "Orc Stronghold",   shortName: "Orc Fort",  icon: "flag.fill", minFloor: 21, maxFloor: 30),
+        Zone(id: "sunken",   name: "Sunken City",       shortName: "Sunken",    icon: "water.waves", minFloor: 31, maxFloor: 40),
+        Zone(id: "abyss",    name: "The Abyss",         shortName: "Abyss",     icon: "tornado", minFloor: 41, maxFloor: 50),
+        Zone(id: "citadel",  name: "Iron Citadel",      shortName: "Citadel",   icon: "building.columns.fill", minFloor: 51, maxFloor: 60),
+        Zone(id: "hellgate", name: "Hell's Gate",       shortName: "Hell Gate", icon: "flame.fill", minFloor: 61, maxFloor: nil),
     ]
 
     static let zoneEnemyPools: [String: [EnemyType]] = [
@@ -387,6 +427,21 @@ class DungeonGame {
 
     static func isBoss(floor: Int) -> Bool { floor % 10 == 0 }
 
+    // MARK: - Next-boss preview
+    // Every zone ends in a boss on its 10th floor. Showing it coming — a
+    // silhouette and a countdown — turns "just another floor" into a build-up.
+
+    /// The boss floor at the end of the current zone (10, 20, 30…).
+    var nextBossFloor: Int { ((currentFloor - 1) / 10 + 1) * 10 }
+
+    /// Floors left before the boss. 0 means you're on the boss floor now.
+    var floorsUntilBoss: Int { nextBossFloor - currentFloor }
+
+    /// Who's waiting on that floor, and their signature trick. The boss floor
+    /// is always inside the current zone, so the current zone's boss it is.
+    var nextBossEnemy: EnemyType? { DungeonGame.zoneBossEnemies[currentZone.id] }
+    var nextBossGimmick: BossGimmick { DungeonGame.bossGimmick(forZone: currentZone.id) }
+
     // MARK: - Computed properties
 
     private var goldMultiplier: Double {
@@ -405,8 +460,9 @@ class DungeonGame {
     var effectiveGreedCap: Double {
         DungeonGame.greedCap + Double(prestigeUpgrades.first(where: { $0.id == "avarice" })?.level ?? 0)
     }
-    /// Adrenaline: scales ability cooldowns down (1.0 = unchanged).
-    private var abilityCooldownScale: Double {
+    /// Adrenaline: scales ability cooldowns down (1.0 = unchanged). Also
+    /// handed to RaidScene so the upgrade works in raids too.
+    var abilityCooldownScale: Double {
         1.0 - Double(prestigeUpgrades.first(where: { $0.id == "adrenaline" })?.level ?? 0) * 0.10
     }
 
@@ -509,6 +565,7 @@ class DungeonGame {
             }
             isGameOver = true
             inCombat   = false
+            lastSlayer = monsterName.isEmpty ? nil : monsterName
             Analytics.heroDied(floor: currentFloor, deepestEver: deepestFloorEver)
             log("Hero has fallen. Tap Restart to try again.")
             onHeroDeath?()
@@ -529,6 +586,12 @@ class DungeonGame {
     }
 
     func restart() {
+        // The player accepted the death: carve it into the Hall of the Fallen
+        // (a Second Wind revive never reaches here, so it doesn't count).
+        if let fall = currentFall {
+            fallenHeroes = HallOfTheFallen.record(fall)
+        }
+        lastSlayer = nil
         stripActiveEffects()
         usableItems         = []
         pendingFloorEvent   = nil
@@ -582,6 +645,91 @@ class DungeonGame {
     /// hands control to RaidView. The hero carries in their live HP and all
     /// active blessings — clearing all waves earns soul shards, falling in
     /// battle strips blessings and forfeits the at-risk gold pot.
+    /// Soul shards a won raid pays out. The single source of truth for both the
+    /// payout and the result screen — they used to disagree (the screen showed
+    /// floor/5, the payout was floor/3), so the player was told the wrong number.
+    /// Greed multiplies it, so a raid launched from a greedy descent pays more —
+    /// raids are part of the push-your-luck loop, not a side activity.
+    var raidShardReward: Int {
+        Int((Double(max(5, currentFloor / 3)) * greedMultiplier).rounded())
+    }
+
+    /// Share of the full reward you keep by escaping after wave 1 / wave 2.
+    /// Escaping keeps your blessings and pot; pressing on risks both for the rest.
+    static let raidEscapeShare: [Int: Double] = [1: 0.25, 2: 0.50]
+
+    /// Soul shards for escaping after `wavesCleared` waves (0 if you can't escape yet).
+    func raidEscapeReward(wavesCleared: Int) -> Int {
+        guard let share = Self.raidEscapeShare[wavesCleared] else { return 0 }
+        return max(1, Int((Double(raidShardReward) * share).rounded()))
+    }
+
+    // MARK: - Raid danger (briefing)
+
+    /// How a raid stacks up against the hero *on auto-attack*, for the briefing
+    /// card. A rough closed-form estimate (Tools/raid_balance_sim.py is the
+    /// careful version): damage the hero would take killing each wave's enemies
+    /// one by one, minus breather heals, compared to current HP.
+    enum RaidDanger: String {
+        case low = "LOW", moderate = "MODERATE", high = "HIGH", deadly = "DEADLY"
+    }
+
+    var raidDangerRatio: Double {
+        let zoneID = currentZone.id
+        let pool   = DungeonGame.zoneEnemyPools[zoneID] ?? [.skeleton]
+        let floor  = currentFloor
+        // Average raid-scaled enemy for this zone and floor.
+        let avgHp  = Double(pool.map { RaidScene.raidScaled($0.scaledHp(floor: floor, isBoss: false),  by: RaidScene.enemyHpScale) }.reduce(0, +)) / Double(pool.count)
+        let avgAtk = Double(pool.map { RaidScene.raidScaled($0.scaledAtk(floor: floor, isBoss: false), by: RaidScene.enemyAtkScale) }.reduce(0, +)) / Double(pool.count)
+        let atk    = Double(max(1, heroAtk))
+        let killTime = (avgHp / atk).rounded(.up) * 0.9                // auto swing every 0.9s
+        let enemyDps = max(1, avgAtk - Double(heroDef)) / 1.6           // each living enemy
+        var damage = 0.0
+        for wave in 1...3 {
+            let n = Double(RaidScene.enemyCount(wave: wave))
+            damage += enemyDps * killTime * n * (n + 1) / 2              // enemies fall one at a time
+        }
+        damage -= 2 * Double(RaidScene.raidScaled(heroMaxHp, by: RaidScene.breatherHealFraction))
+        return max(0, damage) / Double(max(1, heroHp))
+    }
+
+    var raidDanger: RaidDanger {
+        switch raidDangerRatio {
+        case ..<0.6: return .low
+        case ..<1.0: return .moderate
+        case ..<1.6: return .high
+        default:     return .deadly
+        }
+    }
+
+    // MARK: - Raid outcome
+
+    /// How the last raid ended, for RaidView's result screen. The raid is
+    /// resolved (rewards paid / penalties applied) the moment it ends — not when
+    /// the player taps Continue — so closing the app on the result screen can't
+    /// be mistaken for abandoning a raid. Not saved: it's display-only.
+    struct RaidOutcome: Equatable {
+        enum Kind: Equatable { case cleared, escaped(afterWave: Int), lost }
+        let kind: Kind
+        let shards: Int
+        let loot: Equipment?
+        let blessingsLost: Int
+        let goldLost: Int
+    }
+    var raidOutcome: RaidOutcome?
+
+    /// True while RaidView should be on screen: the raid itself, then its result.
+    var isRaidScreenUp: Bool { isRaidActive || raidOutcome != nil }
+
+    func dismissRaidOutcome() { raidOutcome = nil }
+
+    /// Blessing special effects, summed across stacks. Used by dungeon combat and
+    /// handed to RaidScene, so "carry your blessings into the raid" covers more
+    /// than flat stat mods. Formulas live in `BlessingCombat`.
+    var splashFraction:   Double { activeEffects.reduce(0.0) { $0 + $1.splashDamagePercent } }
+    var thornsFraction:   Double { activeEffects.reduce(0.0) { $0 + $1.thornsDamagePercent } }
+    var killHealFraction: Double { activeEffects.reduce(0.0) { $0 + $1.onKillHealPercent } }
+
     func launchRaid() {
         pendingRestSite = false
         isRaidActive = true
@@ -590,12 +738,23 @@ class DungeonGame {
 
     /// Resolve the raid. Called by RaidView after all waves are cleared (success)
     /// or the hero falls (failure). Returns control to the dungeon loop.
-    func completeRaid(success: Bool) {
+    /// `heroHpAfterRaid` is the HP the hero walked out with — on a win, damage
+    /// taken in the raid now sticks (before, a win quietly restored pre-raid HP).
+    func completeRaid(success: Bool, heroHpAfterRaid: Int) {
         isRaidActive = false
         if success {
-            let earned = max(5, currentFloor / 3)
+            heroHp = max(1, min(heroMaxHp, heroHpAfterRaid))
+            let earned = raidShardReward
             soulShards += earned
+            // A full clear also drops boss-tier loot (Uncommon or better), with
+            // greed improving the odds like any other drop.
+            let loot = EquipmentDrop.rollBoss(floor: currentFloor, luck: greedMultiplier)
+            if let loot { receiveDrop(loot) }
+            raidOutcome = RaidOutcome(kind: .cleared, shards: earned, loot: loot,
+                                      blessingsLost: 0, goldLost: 0)
             log("🏆 RAID COMPLETE — +\(earned) Soul Shard\(earned == 1 ? "" : "s")!")
+            Analytics.raidEnded(outcome: "cleared", wave: 0, floor: currentFloor, shards: earned,
+                                blessings: activeEffects.filter { $0.isBlessing }.count)
         } else {
             let blessingCount = activeEffects.filter { $0.isBlessing }.count
             let goldLost      = atRiskGold
@@ -603,8 +762,27 @@ class DungeonGame {
             atRiskGold = 0
             // Hero exits gravely wounded — alive but weakened by the defeat.
             heroHp = max(1, heroMaxHp / 3)
+            raidOutcome = RaidOutcome(kind: .lost, shards: 0, loot: nil,
+                                      blessingsLost: blessingCount, goldLost: goldLost)
+            Analytics.raidEnded(outcome: "lost", wave: 0, floor: currentFloor, shards: 0,
+                                blessings: blessingCount)
             log("💀 RAID FAILED — \(blessingCount) blessing\(blessingCount == 1 ? "" : "s") lost, \(goldLost)g forfeit.")
         }
+    }
+
+    /// Cash out between waves: take a share of the shards and walk away with your
+    /// blessings and pot intact. The raid's own push-your-luck decision.
+    func escapeRaid(wavesCleared: Int, heroHpAfterRaid: Int) {
+        guard isRaidActive else { return }
+        isRaidActive = false
+        heroHp = max(1, min(heroMaxHp, heroHpAfterRaid))
+        let earned = raidEscapeReward(wavesCleared: wavesCleared)
+        soulShards += earned
+        raidOutcome = RaidOutcome(kind: .escaped(afterWave: wavesCleared), shards: earned, loot: nil,
+                                  blessingsLost: 0, goldLost: 0)
+        Analytics.raidEnded(outcome: "escaped", wave: wavesCleared, floor: currentFloor, shards: earned,
+                            blessings: activeEffects.filter { $0.isBlessing }.count)
+        log("🏃 Escaped the raid after wave \(wavesCleared) — +\(earned) Soul Shard\(earned == 1 ? "" : "s").")
     }
 
     /// Reverse and remove all blessing-type active effects. Curses stay since
@@ -682,6 +860,7 @@ class DungeonGame {
         if monsterHp <= 0 {
             let killedOnFloor = currentFloor
             let isBossKill    = DungeonGame.isBoss(floor: killedOnFloor)
+            recordKillInCodex(isBoss: isBossKill)
             let earned = goldReward(floor: killedOnFloor, isBoss: isBossKill)
             atRiskGold += earned   // earnings join the at-risk pot, not banked gold
             inCombat        = false
@@ -740,9 +919,8 @@ class DungeonGame {
 
             // Blood Rush: each active effect with onKillHealPercent > 0 restores
             // a fraction of max HP. Multiple stacks add together before rounding.
-            let killHealFraction = activeEffects.reduce(0.0) { $0 + $1.onKillHealPercent }
-            if killHealFraction > 0 {
-                let healAmt = max(1, Int(Double(heroMaxHp) * killHealFraction))
+            let healAmt = BlessingCombat.killHeal(maxHp: heroMaxHp, fraction: killHealFraction)
+            if healAmt > 0 {
                 heroHp = min(heroMaxHp, heroHp + healAmt)
                 onHeroHeal?(healAmt)
                 log("❤️‍🔥 Blood Rush: +\(healAmt) HP!")
@@ -805,9 +983,9 @@ class DungeonGame {
             // Thorn Mantle: reflect a portion of the incoming damage back to the
             // monster. Capped at max(1, monsterHp - 1) so thorns can't deal the
             // killing blow — the hero finishes the job on their next strike.
-            let thornsFraction = activeEffects.reduce(0.0) { $0 + $1.thornsDamagePercent }
-            if thornsFraction > 0, monsterHp > 1 {
-                let reflected = min(monsterHp - 1, max(1, Int(Double(dmg) * thornsFraction)))
+            let reflected = BlessingCombat.thornsReflect(incoming: dmg, fraction: thornsFraction,
+                                                         attackerHp: monsterHp)
+            if reflected > 0 {
                 monsterHp -= reflected
                 displayMonsterHp = max(0, monsterHp)
                 log("🌿 Thorns reflect \(reflected) damage!")
@@ -1188,6 +1366,9 @@ class DungeonGame {
               pendingBossVictory == nil,
               !DungeonGame.isBoss(floor: currentFloor),
               currentFloor > 1 else { return }
+        // No random events during the first-session tutorial: a brand-new
+        // player is already learning greed, the pot, and the first camp.
+        guard TutorialStep.current == .done else { return }
         guard Double.random(in: 0...1) < 0.18 else { return }
         // Reroll up to 10 times to find an event the player can afford.
         for _ in 0..<10 {
@@ -1386,6 +1567,13 @@ class DungeonGame {
     }
 
     func dismissDrop() { pendingDrop = nil }
+
+    /// Logs the monster on screen in the bestiary. Bosses also count toward
+    /// their zone's boss entry.
+    private func recordKillInCodex(isBoss: Bool) {
+        guard let enemy = currentEnemyType else { return }
+        codex.recordKill(enemyID: enemy.id, bossOfZone: isBoss ? currentZone.id : nil)
+    }
     func dismissBlessing() { pendingBlessing = nil }
     func dismissBossVictory() { pendingBossVictory = nil }
 
@@ -1399,7 +1587,18 @@ class DungeonGame {
         log("⛩️ You drink the Holy Vial. HP fully restored (+\(healed)).")
     }
 
-    private func receiveDrop(_ item: Equipment) {
+    /// First-run tutorial: hand out one guaranteed boss-tier (Uncommon+) item
+    /// early, so a new player sees loot — and the gear system — in minute one.
+    func grantTutorialDrop() {
+        if let drop = EquipmentDrop.rollBoss(floor: currentFloor) {
+            receiveDrop(drop)
+            log("🎁 Something glints in the rubble...")
+        }
+    }
+
+    /// Not private only so DEBUG launch shortcuts can hand out drops.
+    func receiveDrop(_ item: Equipment) {
+        codex.recordGear(item)   // found counts, even if it's auto-sold below
         let autoSellLevel = prestigeUpgrades.first(where: { $0.id == "autosell" })?.level ?? 0
         if autoSellLevel > 0,
            let itemIdx      = ItemRarity.allCases.firstIndex(of: item.rarity),
@@ -1498,45 +1697,41 @@ class DungeonGame {
 
     // MARK: - Daily Quests
 
-    private static let questPool: [DailyQuest] = [
-        // Kill any
-        DailyQuest(id: "kill_15",   title: "Skirmisher",       description: "Slay 15 enemies",    type: .killAny,     goalCount: 15,   rewardGold: 35),
-        DailyQuest(id: "kill_30",   title: "Monster Slayer",   description: "Slay 30 enemies",    type: .killAny,     goalCount: 30,   rewardGold: 55),
-        DailyQuest(id: "kill_50",   title: "Fighter",          description: "Slay 50 enemies",    type: .killAny,     goalCount: 50,   rewardGold: 75),
-        DailyQuest(id: "kill_75",   title: "Relentless",       description: "Slay 75 enemies",    type: .killAny,     goalCount: 75,   rewardGold: 100),
-        DailyQuest(id: "kill_125",  title: "Unstoppable",      description: "Slay 125 enemies",   type: .killAny,     goalCount: 125,  rewardGold: 155),
-        DailyQuest(id: "kill_200",  title: "Berserker",        description: "Slay 200 enemies",   type: .killAny,     goalCount: 200,  rewardGold: 220),
-        DailyQuest(id: "kill_350",  title: "Warlord",          description: "Slay 350 enemies",   type: .killAny,     goalCount: 350,  rewardGold: 295),
-        // Kill boss
-        DailyQuest(id: "boss_1",    title: "First Blood",      description: "Defeat a boss",      type: .killBoss,    goalCount: 1,    rewardGold: 50),
-        DailyQuest(id: "boss_2",    title: "Boss Hunter",      description: "Defeat 2 bosses",    type: .killBoss,    goalCount: 2,    rewardGold: 80),
-        DailyQuest(id: "boss_5",    title: "Boss Crusher",     description: "Defeat 5 bosses",    type: .killBoss,    goalCount: 5,    rewardGold: 160),
-        DailyQuest(id: "boss_8",    title: "Boss Slayer",      description: "Defeat 8 bosses",    type: .killBoss,    goalCount: 8,    rewardGold: 240),
-        DailyQuest(id: "boss_12",   title: "Boss Breaker",     description: "Defeat 12 bosses",   type: .killBoss,    goalCount: 12,   rewardGold: 320),
-        // Earn gold
-        DailyQuest(id: "gold_100",  title: "Coin Collector",   description: "Earn 100 gold",      type: .earnGold,    goalCount: 100,  rewardGold: 35),
-        DailyQuest(id: "gold_300",  title: "Gold Seeker",      description: "Earn 300 gold",      type: .earnGold,    goalCount: 300,  rewardGold: 70),
-        DailyQuest(id: "gold_500",  title: "Wealth Seeker",    description: "Earn 500 gold",      type: .earnGold,    goalCount: 500,  rewardGold: 110),
-        DailyQuest(id: "gold_700",  title: "Fortune Hunter",   description: "Earn 700 gold",      type: .earnGold,    goalCount: 700,  rewardGold: 140),
-        DailyQuest(id: "gold_1200", title: "Treasure Hoarder", description: "Earn 1,200 gold",    type: .earnGold,    goalCount: 1200, rewardGold: 210),
-        DailyQuest(id: "gold_2000", title: "Gold Hoarder",     description: "Earn 2,000 gold",    type: .earnGold,    goalCount: 2000, rewardGold: 285),
-        // Clear floors
-        DailyQuest(id: "floors_10", title: "Floor Crawler",    description: "Clear 10 floors",    type: .clearFloors, goalCount: 10,   rewardGold: 35),
-        DailyQuest(id: "floors_20", title: "Dungeon Diver",    description: "Clear 20 floors",    type: .clearFloors, goalCount: 20,   rewardGold: 60),
-        DailyQuest(id: "floors_35", title: "Dungeon Runner",   description: "Clear 35 floors",    type: .clearFloors, goalCount: 35,   rewardGold: 90),
-        DailyQuest(id: "floors_50", title: "Deep Delver",      description: "Clear 50 floors",    type: .clearFloors, goalCount: 50,   rewardGold: 130),
-        DailyQuest(id: "floors_80", title: "Abyss Diver",      description: "Clear 80 floors",    type: .clearFloors, goalCount: 80,   rewardGold: 190),
-        DailyQuest(id: "floors_100",title: "Abyss Conqueror",  description: "Clear 100 floors",   type: .clearFloors, goalCount: 100,  rewardGold: 250),
-        // Reach floor
-        DailyQuest(id: "reach_5",   title: "Adventurer",       description: "Reach floor 5",      type: .reachFloor,  goalCount: 5,    rewardGold: 30),
-        DailyQuest(id: "reach_15",  title: "First Steps",      description: "Reach floor 15",     type: .reachFloor,  goalCount: 15,   rewardGold: 55),
-        DailyQuest(id: "reach_25",  title: "Dungeon Walker",   description: "Reach floor 25",     type: .reachFloor,  goalCount: 25,   rewardGold: 75),
-        DailyQuest(id: "reach_40",  title: "Depths Explorer",  description: "Reach floor 40",     type: .reachFloor,  goalCount: 40,   rewardGold: 110),
-        DailyQuest(id: "reach_50",  title: "Spelunker",        description: "Reach floor 50",     type: .reachFloor,  goalCount: 50,   rewardGold: 130),
-        DailyQuest(id: "reach_60",  title: "Abyss Walker",     description: "Reach floor 60",     type: .reachFloor,  goalCount: 60,   rewardGold: 170),
-        DailyQuest(id: "reach_80",  title: "Floor Master",     description: "Reach floor 80",     type: .reachFloor,  goalCount: 80,   rewardGold: 230),
-        DailyQuest(id: "reach_100", title: "Abyss Lord",       description: "Reach floor 100",    type: .reachFloor,  goalCount: 100,  rewardGold: 290),
+    // Three dailies a day — one easy, one medium, one stretch — instead of
+    // twelve. Twelve read as a chore list (and with "Reach floor 100" in the
+    // mix, the Daily Champion bonus was close to impossible). Three achievable
+    // goals is a nudge, not grind (engagement chart: "artificial grind" row).
+    // Goals that took many hours (350 kills, 12 bosses, 2,000 gold, floor 40+)
+    // are gone; they suit achievements, not dailies.
+
+    private static let easyQuests: [DailyQuest] = [
+        DailyQuest(id: "kill_15",   title: "Skirmisher",      description: "Slay 15 enemies",  type: .killAny,     goalCount: 15,  rewardGold: 35),
+        DailyQuest(id: "kill_30",   title: "Monster Slayer",  description: "Slay 30 enemies",  type: .killAny,     goalCount: 30,  rewardGold: 55),
+        DailyQuest(id: "gold_100",  title: "Coin Collector",  description: "Earn 100 gold",    type: .earnGold,    goalCount: 100, rewardGold: 35),
+        DailyQuest(id: "floors_10", title: "Floor Crawler",   description: "Clear 10 floors",  type: .clearFloors, goalCount: 10,  rewardGold: 35),
+        DailyQuest(id: "reach_5",   title: "Adventurer",      description: "Reach floor 5",    type: .reachFloor,  goalCount: 5,   rewardGold: 30),
+        DailyQuest(id: "boss_1",    title: "First Blood",     description: "Defeat a boss",    type: .killBoss,    goalCount: 1,   rewardGold: 50),
     ]
+    private static let mediumQuests: [DailyQuest] = [
+        DailyQuest(id: "kill_50",   title: "Fighter",         description: "Slay 50 enemies",  type: .killAny,     goalCount: 50,  rewardGold: 75),
+        DailyQuest(id: "kill_75",   title: "Relentless",      description: "Slay 75 enemies",  type: .killAny,     goalCount: 75,  rewardGold: 100),
+        DailyQuest(id: "gold_300",  title: "Gold Seeker",     description: "Earn 300 gold",    type: .earnGold,    goalCount: 300, rewardGold: 70),
+        DailyQuest(id: "gold_500",  title: "Wealth Seeker",   description: "Earn 500 gold",    type: .earnGold,    goalCount: 500, rewardGold: 110),
+        DailyQuest(id: "floors_20", title: "Dungeon Diver",   description: "Clear 20 floors",  type: .clearFloors, goalCount: 20,  rewardGold: 60),
+        DailyQuest(id: "boss_2",    title: "Boss Hunter",     description: "Defeat 2 bosses",  type: .killBoss,    goalCount: 2,   rewardGold: 80),
+        DailyQuest(id: "reach_15",  title: "First Steps",     description: "Reach floor 15",   type: .reachFloor,  goalCount: 15,  rewardGold: 55),
+    ]
+    private static let stretchQuests: [DailyQuest] = [
+        DailyQuest(id: "kill_125",  title: "Unstoppable",     description: "Slay 125 enemies", type: .killAny,     goalCount: 125, rewardGold: 155),
+        DailyQuest(id: "kill_200",  title: "Berserker",       description: "Slay 200 enemies", type: .killAny,     goalCount: 200, rewardGold: 220),
+        DailyQuest(id: "gold_700",  title: "Fortune Hunter",  description: "Earn 700 gold",    type: .earnGold,    goalCount: 700, rewardGold: 140),
+        DailyQuest(id: "floors_35", title: "Dungeon Runner",  description: "Clear 35 floors",  type: .clearFloors, goalCount: 35,  rewardGold: 90),
+        DailyQuest(id: "boss_5",    title: "Boss Crusher",    description: "Defeat 5 bosses",  type: .killBoss,    goalCount: 5,   rewardGold: 160),
+        DailyQuest(id: "reach_25",  title: "Dungeon Walker",  description: "Reach floor 25",   type: .reachFloor,  goalCount: 25,  rewardGold: 75),
+    ]
+
+    /// Every quest a day can draw from, easiest tier first.
+    static var questTiers: [[DailyQuest]] { [easyQuests, mediumQuests, stretchQuests] }
 
     static func todayDateKey() -> String {
         let f = DateFormatter()
@@ -1550,16 +1745,23 @@ class DungeonGame {
         return parts[0] * 10000 + parts[1] * 100 + parts[2]
     }
 
+    /// Today's three dailies: one from each tier, chosen deterministically from
+    /// the date (same three all day, even across relaunches, so saved progress
+    /// lines up by id). Each pick avoids a quest type already chosen, so a day
+    /// is never "kill 15 / kill 50 / kill 200".
     static func selectQuestsForDay(_ dayKey: String) -> [DailyQuest] {
-        let pool = questPool
         var seed = questSeed(for: dayKey)
-        var indices: [Int] = []
-        while indices.count < min(12, pool.count) {
+        var picked: [DailyQuest] = []
+        for tier in questTiers {
             seed = seed &* 1664525 &+ 1013904223
-            let idx = ((seed % pool.count) + pool.count) % pool.count
-            if !indices.contains(idx) { indices.append(idx) }
+            let start = ((seed % tier.count) + tier.count) % tier.count
+            // Walk the tier from the seeded start to the first unused type.
+            let choice = (0..<tier.count)
+                .map { tier[(start + $0) % tier.count] }
+                .first { q in !picked.contains { $0.type == q.type } } ?? tier[start]
+            picked.append(choice)
         }
-        return indices.map { pool[$0] }
+        return picked
     }
 
     private func checkAndRefreshDailyQuests() {
@@ -1641,6 +1843,13 @@ class DungeonGame {
         // v9 additions (optional for backwards compatibility)
         var greedMultiplier: Double?
         var atRiskGold: Int?
+        // v10 additions (optional for backwards compatibility): mid-decision
+        // state, so quitting can't skip a rest-site choice or escape a raid.
+        var pendingRestSite: Bool?
+        var isRaidActive: Bool?
+        // v11: who killed the hero, so a relaunch on the game-over screen
+        // still records "slain by X" in the Hall of the Fallen.
+        var lastSlayer: String?
     }
 
     private static let saveKey = "dungeonSave_v2"
@@ -1658,6 +1867,7 @@ class DungeonGame {
     }
 
     func save() {
+        codex.save()
         let data = SaveData(
             characterID: characterID,
             heroHp: heroHp, heroMaxHp: heroMaxHp, heroAtk: heroAtk,
@@ -1685,7 +1895,10 @@ class DungeonGame {
             retiredCharacterIDs: retiredCharacterIDs,
             totalPrestiges: totalPrestiges,
             greedMultiplier: greedMultiplier,
-            atRiskGold: atRiskGold
+            atRiskGold: atRiskGold,
+            pendingRestSite: pendingRestSite,
+            isRaidActive: isRaidActive,
+            lastSlayer: lastSlayer
         )
         if let encoded = try? JSONEncoder().encode(data) {
             UserDefaults.standard.set(encoded, forKey: Self.saveKey)
@@ -1753,11 +1966,18 @@ class DungeonGame {
         totalPrestiges       = data.totalPrestiges       ?? 0
         greedMultiplier      = data.greedMultiplier      ?? 1.0
         atRiskGold           = data.atRiskGold           ?? 0
+        pendingRestSite      = data.pendingRestSite      ?? false
+        isRaidActive         = data.isRaidActive         ?? false
+        lastSlayer           = data.lastSlayer
 
         displayMonsterHp    = inCombat ? max(0, monsterHp) : 0
         displayMonsterMaxHp = inCombat ? monsterMaxHp : 0
         displayMonsterName  = inCombat ? monsterName : ""
         currentFightFloor   = inCombat ? currentFloor : 0
+
+        // Gear already owned counts as found, so players who had gear before
+        // the codex existed don't start with an empty collection.
+        for item in Array(equippedItems.values) + inventory { codex.recordGear(item) }
 
         return data.savedAt
     }
@@ -1808,6 +2028,7 @@ class DungeonGame {
             } else if inCombat {
                 monsterHp -= max(1, heroAtk)
                 if monsterHp <= 0 {
+                    recordKillInCodex(isBoss: DungeonGame.isBoss(floor: currentFloor))
                     let earned = goldReward(floor: currentFloor, isBoss: DungeonGame.isBoss(floor: currentFloor))
                     gold += earned; goldEarned += earned
                     inCombat = false; ticksUntilFight = 2
@@ -1850,10 +2071,32 @@ class DungeonGame {
     }
 
     func handleForeground() -> OfflineSummary? {
+        // Was a raid running in *this* session before we load? True only when the
+        // app was briefly backgrounded mid-raid (RaidView is still on screen).
+        // A fresh launch starts with no live raid, so a saved isRaidActive then
+        // means the app was closed mid-raid.
+        let raidWasLive = isRaidActive
         guard let savedAt = load() else { return nil }
+
+        if isRaidActive && !raidWasLive {
+            // Closed mid-raid (force-quit, or the system killed the app): the raid
+            // counts as lost. Otherwise quitting would be a free escape from a
+            // losing raid with the pot and blessings intact.
+            abandonedRaid = AbandonedRaid(
+                blessingsLost: activeEffects.filter { $0.isBlessing }.count,
+                goldLost: atRiskGold)
+            completeRaid(success: false, heroHpAfterRaid: 0)
+            raidOutcome = nil   // the alert explains it; no result screen to show
+            log("🏳️ Raid abandoned — counted as a loss.")
+        }
+
         let elapsed = Date.now.timeIntervalSince(savedAt)
         save()
         guard elapsed > 10 else { return nil }
+        // A live raid just pauses while the app is away: no idle progress, and
+        // crucially no "make camp" auto-banking of the pot mid-raid (which was a
+        // second escape — background for 10s and your gold was safe).
+        guard !isRaidActive else { return nil }
         let summary = simulateOffline(seconds: elapsed)
         return summary.hasContent ? summary : nil
     }

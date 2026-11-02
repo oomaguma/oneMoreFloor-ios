@@ -6,7 +6,7 @@
 //
 
 import Testing
-@testable import letsMakeAGame
+@testable import oneMoreFloor
 
 struct OneMoreFloorTests {
 
