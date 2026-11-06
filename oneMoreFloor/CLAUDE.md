@@ -22,7 +22,7 @@
 - **Language:** Swift / SwiftUI
 - **Game engine:** SpriteKit (for combat animations in `SoldierAnimationScene.swift`)
 - **Architecture:** `DungeonGame` is the central game state model. `ContentView.swift` is the root router; `Screens/GameView.swift` owns the UI and drives the game loop via a SwiftUI `.task` that calls `game.tick()` on a timer interval. Views are split by area under `Screens/`, `Battle/`, `Overlays/`, `HUD/`, `Navigation/`, `Tabs/`.
-- **Design system:** `Theme/Theme.swift` holds the palette, fonts, `.gamePanel()`, `ChunkyButtonStyle`, and `GameBar`. Fonts: `display` / `number` are the Pixelify Sans pixel font (bundled in `Theme/Fonts/`); `label` / `body` are rounded system text for anything players read at length. Use these tokens instead of raw `Color(red:…)` / `.monospaced` fonts in new or touched views.
+- **Design system:** `Theme/Theme.swift` holds the palette, fonts, `.gamePanel()`, `ChunkyButtonStyle`, and `GameBar`. Fonts: `display` / `number` are the Pixelify Sans pixel font (bundled in `Theme/Fonts/`); `label` / `body` are rounded system text for anything players read at length. Use these tokens instead of raw `Color(red:…)` / `.monospaced` fonts in new or touched views. For switching between pages of one screen, use `PageSwitcher` (`Theme/PageSwitcher.swift`; the page enum conforms to `SwitcherPage`) instead of a stock segmented `Picker`.
 - **Monetization:** Google Mobile Ads, UMP (consent), StoreKit (IAP via `StoreManager`)
 - **Analytics:** PostHog (`AnalyticsManager`)
 - **Persistence:** Custom JSON save/load in `DungeonGame`

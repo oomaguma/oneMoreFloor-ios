@@ -10,7 +10,17 @@ import SwiftUI
 struct CodexView: View {
     let codex: Codex
 
-    private enum Page: String, CaseIterable { case bestiary = "BESTIARY", gear = "GEAR" }
+    private enum Page: String, SwitcherPage {
+        case bestiary = "BESTIARY", gear = "GEAR"
+
+        var title: String { rawValue }
+        var icon: String {
+            switch self {
+            case .bestiary: return "pawprint.fill"
+            case .gear:     return "shield.lefthalf.filled"
+            }
+        }
+    }
     @State private var page: Page = .bestiary
 
     var body: some View {
@@ -29,11 +39,10 @@ struct CodexView: View {
             }
             .padding(.top, 20)
 
-            Picker("Page", selection: $page) {
-                ForEach(Page.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
+            // The game's own switcher (Theme/PageSwitcher.swift), not the
+            // stock segmented control.
+            PageSwitcher(page: $page)
+                .padding(.horizontal, 16)
 
             ScrollView {
                 switch page {
@@ -44,8 +53,8 @@ struct CodexView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Palette.abyss)
-        // The game is always dark; without this the segmented picker draws its
-        // unselected label in light-mode black, invisible on the abyss background.
+        // The game is always dark; this keeps any system-drawn bits of the sheet
+        // (scroll indicators, the grabber) styled for a dark background.
         .environment(\.colorScheme, .dark)
     }
 }

@@ -12,23 +12,29 @@ struct HeroTabView: View {
     let game: DungeonGame
 
     /// The two halves of the tab. Remembered between visits, so a player who
-    /// lives in the gear screen doesn't have to switch every time.
-    enum Page: String, CaseIterable {
+    /// lives in the gear screen doesn't have to switch every time. The raw
+    /// values are what @AppStorage saves, so don't rename them.
+    enum Page: String, SwitcherPage {
         case upgrades = "UPGRADES"
         case gear     = "GEAR"
+
+        var title: String { rawValue }
+        var icon: String {
+            switch self {
+            case .upgrades: return "arrow.up.circle.fill"
+            case .gear:     return "shield.lefthalf.filled"
+            }
+        }
     }
     @AppStorage("com.oneMoreFloor.heroTabPage") private var page: Page = .upgrades
 
     var body: some View {
         VStack(spacing: 0) {
-            Picker("Page", selection: $page) {
-                ForEach(Page.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 16)
-            .padding(.top, 18)
-            // The game is always dark; this keeps the unselected label readable.
-            .environment(\.colorScheme, .dark)
+            // The game's own switcher (Theme/PageSwitcher.swift), not the
+            // stock segmented control.
+            PageSwitcher(page: $page)
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
 
             // Each page keeps its own header (gold on Upgrades; Codex and
             // Optimize on Gear), so they're shown as-is underneath.
